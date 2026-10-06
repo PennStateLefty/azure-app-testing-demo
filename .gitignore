@@ -61,6 +61,8 @@ nunit-*.xml
 *.db-shm
 *.db-wal
 # Playwright
+node_modules/
+test-results/
 playwright-report/
 .playwright/
 # azd

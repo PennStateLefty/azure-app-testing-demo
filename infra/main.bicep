@@ -12,6 +12,9 @@ param playwrightLocation string = 'eastus'
 @description('Object ID for the principal that becomes the Entra-only Azure SQL administrator.')
 param sqlAdminObjectId string
 
+@description('Additional user or service principal object IDs that run Playwright tests and need Storage Blob Data Contributor on the Playwright report storage account.')
+param testRunnerPrincipalIds array = []
+
 @description('Display/login name for the Entra-only Azure SQL administrator.')
 param sqlAdminLogin string
 
@@ -131,6 +134,9 @@ module playwright 'modules/playwright.bicep' = {
     location: playwrightLocation
     tags: tags
     githubIdentityPrincipalId: resources.outputs.GITHUB_IDENTITY_PRINCIPAL_ID
+    testRunnerPrincipalIds: union([
+      sqlAdminObjectId
+    ], testRunnerPrincipalIds)
   }
 }
 
@@ -148,6 +154,7 @@ output LOAD_TEST_RESOURCE_NAME string = resources.outputs.LOAD_TEST_RESOURCE_NAM
 output PLAYWRIGHT_WORKSPACE_NAME string = playwright.outputs.PLAYWRIGHT_WORKSPACE_NAME
 output PLAYWRIGHT_RESOURCE_GROUP string = playwrightResourceGroupName
 output PLAYWRIGHT_SERVICE_URL string = playwright.outputs.PLAYWRIGHT_SERVICE_URL
+output PLAYWRIGHT_REPORT_STORAGE_ACCOUNT_NAME string = playwright.outputs.PLAYWRIGHT_REPORT_STORAGE_ACCOUNT_NAME
 #disable-next-line outputs-should-not-contain-secrets
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = resources.outputs.APPLICATIONINSIGHTS_CONNECTION_STRING
 output APP_SERVICE_PLAN_ID string = resources.outputs.APP_SERVICE_PLAN_ID

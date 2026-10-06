@@ -67,8 +67,8 @@
         </HeaderManager>
         <hashTree />
         <UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="Uniform think time 1-3s (scaled)" enabled="true">
-          <stringProp name="ConstantTimer.delay">${__jexl3(1000 * ${__groovy(System.getenv('thinkScale') ?: props.getProperty('thinkScale') ?: '1')})}</stringProp>
-          <stringProp name="RandomTimer.range">${__jexl3(2000 * ${__groovy(System.getenv('thinkScale') ?: props.getProperty('thinkScale') ?: '1')})}</stringProp>
+          <stringProp name="ConstantTimer.delay">${__groovy((1000 * ((System.getenv('thinkScale') ?: props.getProperty('thinkScale') ?: '1') as BigDecimal)).toInteger())}</stringProp>
+          <stringProp name="RandomTimer.range">${__groovy((2000 * ((System.getenv('thinkScale') ?: props.getProperty('thinkScale') ?: '1') as BigDecimal)).toInteger())}</stringProp>
         </UniformRandomTimer>
         <hashTree />
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET dashboard KPIs" enabled="true">

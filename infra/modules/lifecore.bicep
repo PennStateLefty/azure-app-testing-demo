@@ -46,6 +46,7 @@ var loadTestName = 'lt-lifecore-${resourceToken}'
 var readerRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')
 var websiteContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'de139f84-1756-47ae-9be6-808fbbe84772')
 var loadTestContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '749a398d-560b-491b-bb21-08924219302e')
+var monitoringReaderRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '43d0d8ad-25c7-4714-9337-8ba259a9fe05')
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: logAnalyticsName
@@ -491,6 +492,15 @@ resource githubResourceGroupReader 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
+resource loadTestMonitoringReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, loadTest.id, monitoringReaderRoleId)
+  properties: {
+    roleDefinitionId: monitoringReaderRoleId
+    principalId: loadTest.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 output WEB_APP_NAME string = webApp.name
 output WEB_URL string = 'https://${webApp.properties.defaultHostName}'
 output SQL_SERVER_NAME string = sqlServer.name
@@ -501,6 +511,7 @@ output APP_IDENTITY_CLIENT_ID string = appIdentity.properties.clientId
 output GITHUB_IDENTITY_CLIENT_ID string = githubIdentity.properties.clientId
 output GITHUB_IDENTITY_PRINCIPAL_ID string = githubIdentity.properties.principalId
 output LOAD_TEST_RESOURCE_NAME string = loadTest.name
+output LOAD_TEST_PRINCIPAL_ID string = loadTest.identity.principalId
 #disable-next-line outputs-should-not-contain-secrets
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = appInsights.properties.ConnectionString
 output APP_SERVICE_PLAN_ID string = plan.id

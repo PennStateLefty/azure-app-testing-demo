@@ -30,7 +30,7 @@ The system under test is **LifeCore Suite**, a mock life & annuity administratio
 | `src/LifeCore.Domain` / `src/LifeCore.Data` | Entities, business rules, EF Core (SQLite locally, Azure SQL in Azure), deterministic seeder |
 | `src/LifeCore.Web` / `src/LifeCore.Web.Client` | Host + APIs / Blazor WASM UI |
 | `tests/LifeCore.UnitTests` | xUnit v3 domain + API integration tests |
-| `tests/LifeCore.PlaywrightTests` | NUnit Playwright E2E tests (local or Playwright Workspaces) |
+| `tests/playwright` | TypeScript Playwright E2E tests (local or Playwright Workspaces with Azure reporting) |
 | `loadtests/` | JMeter `.jmx` scripts, CSV data, Azure Load Testing YAML configs |
 | `infra/`, `azure.yaml`, `hooks/` | Bicep + azd provisioning |
 | `.github/workflows/` | CI, provision, deploy, UI tests, load tests |
@@ -61,11 +61,12 @@ SQLite is used by default and seeded on startup (50 agents, 2,000 cases, 10,000 
 
 ```bash
 dotnet test tests/LifeCore.UnitTests                 # unit + API integration
-dotnet test tests/LifeCore.PlaywrightTests           # E2E against BASE_URL (default http://localhost:5119)
+cd tests/playwright && npm ci && npx playwright install chromium
+cd tests/playwright && npx playwright test        # E2E against BASE_URL (default http://localhost:5119)
 ```
 
 - UI tests and Playwright Workspaces: see [docs/ui-testing.md](docs/ui-testing.md)
-- Load tests (smoke / underwriter journey / CSR servicing / mixed peak): see [docs/load-testing.md](docs/load-testing.md)
+- Load tests (smoke / underwriter journey / CSR servicing / mixed peak): see [docs/load-testing.md](docs/load-testing.md). The Azure Load Testing configs include App Service, App Service Plan, Azure SQL, and Application Insights app components so runs capture server-side Azure Monitor metrics.
 
 ## Deploy to Azure
 
@@ -77,7 +78,7 @@ azd provision            # Bicep: App Service (VNet-integrated), private Azure S
 
 Then set the GitHub repository variables printed by the postprovision hook and push to `main`. Deployment is **App Service continuous deployment via GitHub Actions** (`DEPLOYMENT_MODE=githubActions`); if your subscription blocks ZIP deploy, switch to the **App Service Build Service** fallback (`DEPLOYMENT_MODE=appServiceBuild`). Full details: [docs/deployment.md](docs/deployment.md).
 
-Defaults: app in **West US 3** and the Playwright Workspace in **East US**. Azure SQL is private-endpoint only, and the app managed identity is its Entra admin.
+Defaults: app in **West US 3** and the Playwright Workspace in **East US**. Azure SQL is private-endpoint only, and the app managed identity is its Entra admin. The Playwright Workspace has reporting enabled with a linked StorageV2 account for portal reports, traces, screenshots, and videos.
 
 ## Performance demo (before/after)
 

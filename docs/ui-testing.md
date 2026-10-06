@@ -1,18 +1,22 @@
 # UI testing
 
-LifeCore Suite end-to-end tests live in `tests/LifeCore.PlaywrightTests`. They are NUnit tests built on `Microsoft.Playwright.NUnit`, use `data-testid` selectors from `docs/ui/testids-*.md`, and default to `BASE_URL=http://localhost:5119`.
+LifeCore Suite end-to-end tests live in `tests/playwright`. They use the JavaScript/TypeScript Playwright runner (`@playwright/test`) so Azure App Testing Playwright Workspaces can upload portal reports with traces, screenshots, and videos through `@azure/playwright/reporter`. Selectors come from `docs/ui/testids-*.md`; the default local target is `BASE_URL=http://localhost:5119`.
 
 ## Run locally
 
 ```bash
-dotnet build tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj
-pwsh tests/LifeCore.PlaywrightTests/bin/Debug/net10.0/playwright.ps1 install chromium
+cd tests/playwright
+npm ci
+npx playwright install chromium
+
+# in another shell from repo root:
 Admin__EnableReset=true dotnet run --project src/LifeCore.Web --urls http://localhost:5119
-# in another shell, after /health/ready is 200:
-dotnet test tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj --settings tests/LifeCore.PlaywrightTests/.runsettings
+
+# after /health/ready is 200:
+npx playwright test
 ```
 
-If browser downloads are blocked, install Chrome or Edge locally and run with `BROWSER_CHANNEL=chrome` or `BROWSER_CHANNEL=msedge`.
+If browser downloads are blocked, install Chrome or Edge locally and run with a matching Playwright project/channel update.
 
 ## Run with Azure App Testing Playwright Workspaces
 
@@ -25,11 +29,18 @@ az login --tenant <tenant-id>
 2. Set the workspace endpoint and target app URL:
 
 ```bash
-export PLAYWRIGHT_SERVICE_URL="https://<region>.api.playwright.microsoft.com/..."
+export AZURE_TENANT_ID="<tenant-id>"
+export PLAYWRIGHT_SERVICE_URL="wss://<region>.api.playwright.microsoft.com/playwrightworkspaces/<workspace-id>/browsers"
 export BASE_URL="https://<deployed-app-hostname>"
+cd tests/playwright
+npx playwright test -c playwright.service.config.ts --workers=20
 ```
 
-The test setup uses `DefaultAzureCredential` with Entra ID and exposes `<loopback>` by default through `PLAYWRIGHT_SERVICE_EXPOSE_NETWORK`, which allows cloud browsers to reach a local forwarded app when supported. Omit `PLAYWRIGHT_SERVICE_URL` for local browsers.
+`playwright.service.config.ts` uses `AzureCliCredential({ tenantId: process.env.AZURE_TENANT_ID })` when a tenant is provided, falls back to `DefaultAzureCredential`, and exposes `<loopback>` by default through `PLAYWRIGHT_SERVICE_EXPOSE_NETWORK`. The HTML reporter must remain before `@azure/playwright/reporter`; do not set a custom HTML output folder because the Azure reporter uploads the standard report.
+
+The Playwright Workspace must have reporting enabled, a linked Storage account, and Storage Blob Data Contributor for every local or CI principal that runs tests. Trace viewing also requires Blob CORS for `https://trace.playwright.dev` with `GET` and `OPTIONS`.
+
+> **Known limitation in the demo subscription:** a tenant policy forces `publicNetworkAccess=Disabled` on storage accounts, and Playwright Workspaces reporting cannot upload through private endpoints. Tests run and pass on the workspace, but portal run details stay empty until the reporting storage account is exempted (for example, tag it `SecurityControl=Ignore`) or the policy is relaxed. Until then, use the `playwright-report` HTML artifact from the `ui-tests` workflow.
 
 ## Categories
 
@@ -38,18 +49,19 @@ The test setup uses `DefaultAzureCredential` with Entra ID and exposes `<loopbac
 - `CaseWorkbench`: pending requirements, blocked and successful decisions, tabs, and not-found state.
 - `Policy360`: search, tab content, beneficiary validation, service actions, annuity funds, and not-found state.
 
-Use NUnit filters, for example:
+Use Playwright grep filters, for example:
 
 ```bash
-dotnet test tests/LifeCore.PlaywrightTests --settings tests/LifeCore.PlaywrightTests/.runsettings --filter "Category=Smoke"
+cd tests/playwright
+npx playwright test --grep Smoke
 ```
 
 ## GitHub workflow
 
-`.github/workflows/ui-tests.yml` restores and builds `tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj`, then runs:
+`.github/workflows/ui-tests.yml` uses GitHub OIDC (`azure/login`), installs the TypeScript suite with `npm ci`, then runs:
 
 ```bash
-dotnet test tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj --configuration Release --no-build --logger "trx;LogFileName=playwright-tests.trx" --results-directory TestResults/playwright -- NUnit.NumberOfTestWorkers=20
+npx playwright test -c playwright.service.config.ts --workers=20
 ```
 
-It sets `PLAYWRIGHT_SERVICE_URL` from `vars.PLAYWRIGHT_SERVICE_URL` and `BASE_URL` from the workflow input or `vars.WEB_URL`, matching the test implementation. The workflow does not pass `--settings tests/LifeCore.PlaywrightTests/.runsettings`; CLI worker and logger arguments still work, but runsettings defaults such as `PLAYWRIGHT_SERVICE_EXPOSE_NETWORK=<loopback>` are not applied unless the workflow is updated or the variable is configured in Actions.
+It sets `AZURE_TENANT_ID`, `PLAYWRIGHT_SERVICE_URL`, and `BASE_URL` from repository variables/workflow input, and uploads `tests/playwright/playwright-report` plus `tests/playwright/test-results` as the `playwright-report` artifact.

@@ -14,8 +14,8 @@ Provisioned resources:
 - Virtual network with an App Service-delegated subnet (`snet-app`) and a private-endpoint subnet (`snet-pe`). The web app uses regional VNet integration with all outbound traffic routed through the VNet.
 - Azure SQL server with Entra-only authentication, **public network access disabled**, a private endpoint, and the `privatelink.database.windows.net` private DNS zone linked to the VNet. Database: serverless General Purpose `lifecore`.
 - By default (`sqlAdminIsAppIdentity=true`) the app managed identity is the SQL Entra admin, so the app can create and seed the schema without a contained user being created from outside the VNet.
-- Azure Load Testing resource for JMeter test definitions.
-- Playwright Workspace (local auth disabled, regional affinity enabled) in a separate resource group `rg-lifecore-<env>-pw`. Output `PLAYWRIGHT_SERVICE_URL` is the `wss://…/browsers` endpoint the Playwright SDK expects.
+- Azure Load Testing resource for JMeter test definitions, with a managed identity that can read Azure Monitor metrics for App Service, the App Service plan, Azure SQL, and Application Insights app components.
+- Playwright Workspace (local auth disabled, regional affinity enabled, reporting enabled) in a separate resource group `rg-lifecore-<env>-pw`. Output `PLAYWRIGHT_SERVICE_URL` is the `wss://…/browsers` endpoint the Playwright SDK expects. A linked StorageV2 account stores portal reports, traces, screenshots, and videos; GitHub OIDC and configured test-runner principals receive Storage Blob Data Contributor, and Blob CORS allows `https://trace.playwright.dev`.
 
 Default region is `westus3` (East US had no App Service quota in the demo subscription). The Playwright Workspace defaults to `playwrightLocation=eastus` in its own resource group because the workspace API has no West US 3 endpoint, even though the region is listed.
 
@@ -120,6 +120,7 @@ Parameter `linkDeploymentCenter` defaults to `false`. Setting it to `true` in Gi
 - `AZURE_RESOURCE_GROUP`.
 - `LOAD_TEST_RESOURCE_NAME`.
 - `PLAYWRIGHT_SERVICE_URL`.
+- `PLAYWRIGHT_REPORT_STORAGE_ACCOUNT_NAME`.
 - `WEB_URL`.
 - `DEPLOYMENT_MODE` — `githubActions` or `appServiceBuild`.
 
@@ -128,8 +129,10 @@ Parameter `linkDeploymentCenter` defaults to `false`. Setting it to `true` in Gi
 - `ci.yml`: restore, build, and unit tests on pull requests and non-main pushes.
 - `deploy-app.yml`: main-branch deployment in GitHub Actions mode, readiness polling, then smoke load tests and UI tests.
 - `provision.yml`: manual `azd provision` using OIDC. The GitHub identity needs elevated RBAC to create role assignments, so expect the first provision to be local.
-- `ui-tests.yml`: reusable/manual Playwright Workspace test workflow using `PLAYWRIGHT_SERVICE_URL` and `WEB_URL`.
+- `ui-tests.yml`: reusable/manual TypeScript Playwright Workspace test workflow using `AZURE_TENANT_ID`, `PLAYWRIGHT_SERVICE_URL`, and `WEB_URL`; it uploads the local HTML report artifact and the Azure reporter uploads the same run to Playwright Workspaces reporting.
 - `load-tests.yml`: reusable/manual Azure Load Testing workflow. Profiles map to `loadtests/smoke.yaml`, `loadtests/underwriter-journey.yaml`, `loadtests/csr-policy-servicing.yaml`, and `loadtests/mixed-peak.yaml`.
+
+The load test YAML files include `referenceIdentities` and `appComponents` placeholders for server-side metrics. The workflow resolves the deployed resource IDs at run time before invoking `azure/load-testing`, so uploaded tests collect App Service request/5xx/response-time/CPU/memory, App Service Plan CPU/memory, Azure SQL CPU/IO/connection/deadlock, and Application Insights request/dependency metrics.
 
 ## Cost and teardown
 

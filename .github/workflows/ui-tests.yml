@@ -31,6 +31,13 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/playwright/package-lock.json
+
       - name: Azure login
         uses: azure/login@v2
         with:
@@ -38,25 +45,24 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Restore Playwright tests
-        run: dotnet restore tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj
-
-      - name: Build Playwright tests
-        run: dotnet build tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj --configuration Release --no-restore
+      - name: Install Playwright tests
+        working-directory: tests/playwright
+        run: npm ci
 
       - name: Run Playwright tests in Azure App Testing
+        working-directory: tests/playwright
         env:
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           PLAYWRIGHT_SERVICE_URL: ${{ vars.PLAYWRIGHT_SERVICE_URL }}
           BASE_URL: ${{ inputs.base_url || vars.WEB_URL }}
-        run: dotnet test tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj --configuration Release --no-build --settings tests/LifeCore.PlaywrightTests/.runsettings --logger "trx;LogFileName=playwright-tests.trx" --results-directory TestResults/playwright -- NUnit.NumberOfTestWorkers=20
+        run: npx playwright test -c playwright.service.config.ts --workers=20
 
-      - name: Upload Playwright test results
+      - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-test-results
+          name: playwright-report
           path: |
-            TestResults/playwright/**
-            tests/LifeCore.PlaywrightTests/TestResults/**
-            playwright-report/**
+            tests/playwright/playwright-report/**
+            tests/playwright/test-results/**
           if-no-files-found: warn

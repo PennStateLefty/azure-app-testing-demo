@@ -60,10 +60,80 @@ jobs:
           echo "config=$config" >> "$GITHUB_OUTPUT"
           echo "host=$host" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve server-side metric resources
+        id: metric_resources
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          WEB_APP_NAME: ${{ vars.WEB_APP_NAME }}
+          WEB_APP_ID: ${{ vars.WEB_APP_ID }}
+          APP_SERVICE_PLAN_ID: ${{ vars.APP_SERVICE_PLAN_ID }}
+          SQL_DATABASE_ID: ${{ vars.SQL_DATABASE_ID }}
+          APP_INSIGHTS_ID: ${{ vars.APP_INSIGHTS_ID }}
+          HOST: ${{ steps.profile.outputs.host }}
+        run: |
+          set -euo pipefail
+          web_app_name="${WEB_APP_NAME:-${HOST%%.*}}"
+          web_json="$(az webapp show --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --name "$web_app_name" -o json)"
+          web_app_id="${WEB_APP_ID:-$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$web_json")}"
+          app_service_plan_id="${APP_SERVICE_PLAN_ID:-$(python3 -c 'import json,sys; print(json.load(sys.stdin)["serverFarmId"])' <<< "$web_json")}"
+          sql_database_id="${SQL_DATABASE_ID:-$(az resource list --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --resource-type Microsoft.Sql/servers/databases --query "[?contains(name, '/master') == \`false\`] | [0].id" -o tsv)}"
+          app_insights_id="${APP_INSIGHTS_ID:-$(az resource list --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --resource-type microsoft.insights/components --query "[0].id" -o tsv)}"
+
+          {
+            echo "web_app_id=$web_app_id"
+            echo "app_service_plan_id=$app_service_plan_id"
+            echo "sql_database_id=$sql_database_id"
+            echo "app_insights_id=$app_insights_id"
+            echo "web_app_name=$(basename "$web_app_id")"
+            echo "app_service_plan_name=$(basename "$app_service_plan_id")"
+            echo "sql_database_name=$(basename "$sql_database_id")"
+            echo "app_insights_name=$(basename "$app_insights_id")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Prepare load test config
+        id: prepared_config
+        env:
+          TEST_PROFILE: ${{ inputs.test_profile || 'smoke' }}
+          SOURCE_CONFIG: ${{ steps.profile.outputs.config }}
+          WEB_APP_ID: ${{ steps.metric_resources.outputs.web_app_id }}
+          WEB_APP_NAME: ${{ steps.metric_resources.outputs.web_app_name }}
+          APP_SERVICE_PLAN_ID: ${{ steps.metric_resources.outputs.app_service_plan_id }}
+          APP_SERVICE_PLAN_NAME: ${{ steps.metric_resources.outputs.app_service_plan_name }}
+          SQL_DATABASE_ID: ${{ steps.metric_resources.outputs.sql_database_id }}
+          SQL_DATABASE_NAME: ${{ steps.metric_resources.outputs.sql_database_name }}
+          APP_INSIGHTS_ID: ${{ steps.metric_resources.outputs.app_insights_id }}
+          APP_INSIGHTS_NAME: ${{ steps.metric_resources.outputs.app_insights_name }}
+        run: |
+          set -euo pipefail
+          prepared="loadtests/generated-${TEST_PROFILE}.yaml"
+          cp "$SOURCE_CONFIG" "$prepared"
+          python3 - "$prepared" <<'PY'
+          import os
+          import sys
+
+          path = sys.argv[1]
+          replacements = {
+              "__WEB_APP_ID__": os.environ["WEB_APP_ID"],
+              "__WEB_APP_NAME__": os.environ["WEB_APP_NAME"],
+              "__APP_SERVICE_PLAN_ID__": os.environ["APP_SERVICE_PLAN_ID"],
+              "__APP_SERVICE_PLAN_NAME__": os.environ["APP_SERVICE_PLAN_NAME"],
+              "__SQL_DATABASE_ID__": os.environ["SQL_DATABASE_ID"],
+              "__SQL_DATABASE_NAME__": os.environ["SQL_DATABASE_NAME"],
+              "__APP_INSIGHTS_ID__": os.environ["APP_INSIGHTS_ID"],
+              "__APP_INSIGHTS_NAME__": os.environ["APP_INSIGHTS_NAME"],
+          }
+          text = open(path, encoding="utf-8").read()
+          for placeholder, value in replacements.items():
+              text = text.replace(placeholder, value)
+          open(path, "w", encoding="utf-8").write(text)
+          PY
+          echo "config=$prepared" >> "$GITHUB_OUTPUT"
+
       - name: Run Azure Load Testing
         uses: azure/load-testing@v1
         with:
-          loadtestConfigFile: ${{ steps.profile.outputs.config }}
+          loadtestConfigFile: ${{ steps.prepared_config.outputs.config }}
           loadtestResource: ${{ vars.LOAD_TEST_RESOURCE_NAME }}
           resourceGroup: ${{ vars.AZURE_RESOURCE_GROUP }}
           env: |

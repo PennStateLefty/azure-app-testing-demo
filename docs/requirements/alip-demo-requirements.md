@@ -168,7 +168,7 @@ src/
   LifeCore.Data/               EF Core DbContext, EnsureCreated schema setup, seeder
 tests/
   LifeCore.UnitTests/          xUnit v3 domain/API tests
-  LifeCore.PlaywrightTests/    NUnit + Microsoft.Playwright + Azure.Developer.Playwright.NUnit
+  playwright/                  TypeScript + @playwright/test + @azure/playwright
 loadtests/
   jmeter/*.jmx                 JMeter scripts
   jmeter/data/*.csv            Parameter data (case IDs, policy numbers)
@@ -233,8 +233,8 @@ azure.yaml                     azd project for provisioning only
 
 ### 5.1 Playwright UI tests (Playwright Workspaces in Azure App Testing)
 
-- **[DECIDED] Language:** **C# / NUnit**, using `Microsoft.Playwright.NUnit` and **`Azure.Developer.Playwright.NUnit`**, so the repo stays all-.NET. Authenticate to the workspace with **Entra ID** (`DefaultAzureCredential`, using GitHub OIDC in CI). Access tokens aren't used. TypeScript with `@playwright/test` and `@azure/playwright` was considered and not selected.
-- **Configuration:** the workspace region endpoint comes from the `PLAYWRIGHT_SERVICE_URL` environment variable. The base URL comes from `BASE_URL`. Run Chromium, Firefox, and WebKit in parallel (for example 20 workers). Enable workspace reporting.
+- **[DECIDED] Language:** **TypeScript**, using `@playwright/test` (1.57+) and **`@azure/playwright`** so Playwright Workspaces reporting can upload results, traces, screenshots, and videos to the Azure portal. Authenticate to the workspace with **Entra ID** (`AzureCliCredential` with `AZURE_TENANT_ID` locally, GitHub OIDC in CI). Access tokens and NUnit are not used for reporting.
+- **Configuration:** the workspace region endpoint comes from the `PLAYWRIGHT_SERVICE_URL` environment variable. The base URL comes from `BASE_URL`. Run Chromium in parallel (for example 20 workers). Enable workspace reporting with a linked Storage account and Storage Blob Data Contributor for test runners.
 - **Minimum test suites:**
   1. **Dashboard:** KPI tiles render with values. The By Task / By Case toggle works. Filtering by status narrows the rows. Paging works. Clicking a row opens the case summary. "Open in Workbench" navigates correctly.
   2. **Case Workbench:** each tab loads. An out-of-bounds field shows an alert. Ordering a requirement adds a row. Submitting a decision with outstanding requirements shows a validation error. A valid decision updates the status, and the Dashboard reflects it.
@@ -296,7 +296,7 @@ azure.yaml                     azd project for provisioning only
 1. `ci.yml`: restore, build, and run unit tests.
 2. `provision.yml`: run `azd provision` and the post-provision SQL contained-user hook.
 3. `deploy-app.yml`: build/publish the web app and deploy through the selected `deploymentMode` path.
-4. `ui-tests.yml`: `dotnet test tests/LifeCore.PlaywrightTests` against the Playwright Workspace. Publishes results and the trace viewer.
+4. `ui-tests.yml`: `npx playwright test -c tests/playwright/playwright.service.config.ts` against the Playwright Workspace. Publishes the HTML report artifact and uploads results through Azure Playwright reporting.
 5. `load-tests.yml`: `azure/load-testing` with the scenario YAML files (smoke on every deploy, peak on manual dispatch).
 
 ---
@@ -323,7 +323,7 @@ azure.yaml                     azd project for provisioning only
 | Screen 3 | **Policy 360** is selected; Product Configuration Workbench remains a documented alternative but is not part of v1. |
 | Visual design / branding | Adopt Accenture's public design language and palette because no distinct public ALIP design system was found; do not use Accenture logos or wordmarks. |
 | Component library | **MudBlazor** with a custom Accenture-palette theme. |
-| Playwright language | **C# / NUnit** with `Azure.Developer.Playwright.NUnit` and Entra authentication. |
+| Playwright language | **TypeScript** with `@playwright/test`, `@azure/playwright`, Azure Playwright reporter, and Entra authentication. |
 | Hosting | **App Service Linux P1v3** with `DOTNETCORE\|10.0`. |
 | Deployment method | Primary: App Service continuous deployment with the GitHub Actions build provider and `azure/webapps-deploy` through OIDC. Fallback: App Service Build Service (Kudu/Oryx). `azd` provisions only. |
 | Data and database auth | EF Core 10, Azure SQL serverless with Entra-only authentication via user-assigned managed identity, SQLite locally, `EnsureCreated` schema setup for both providers, deterministic startup seed. |
@@ -353,5 +353,5 @@ azure.yaml                     azd project for provisioning only
 - Microsoft Learn, *What is Azure App Testing?*: https://learn.microsoft.com/azure/app-testing/overview-what-is-azure-app-testing
 - Microsoft Learn, Bicep reference for `Microsoft.LoadTestService/playwrightWorkspaces`: https://learn.microsoft.com/azure/templates/microsoft.loadtestservice/playwrightworkspaces
 - Microsoft Learn, Bicep reference for `Microsoft.LoadTestService/loadTests`: https://learn.microsoft.com/azure/templates/microsoft.loadtestservice/loadtests
-- Microsoft Learn, *Azure Playwright NUnit client library for .NET*: https://learn.microsoft.com/dotnet/api/overview/azure/developer.playwright.nunit-readme
+- npm, *@azure/playwright*: https://www.npmjs.com/package/@azure/playwright
 - .NET 10 download and support policy: https://dotnet.microsoft.com/download/dotnet/10.0
