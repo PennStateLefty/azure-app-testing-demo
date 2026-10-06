@@ -1,0 +1,12 @@
+@namespace LifeCore.Web.Client.Components.Policy
+
+<div class="metric @(AlignRight ? "align-right" : null)">
+    <span>@Label</span>
+    <strong>@Value</strong>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public bool AlignRight { get; set; }
+}

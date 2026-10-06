@@ -1,0 +1,5 @@
+.table-wrap { overflow-x: auto; }
+.policy-detail-table { width: 100%; border-collapse: collapse; }
+.policy-detail-table th { text-align: left; background: var(--mud-palette-background-grey); color: var(--mud-palette-text-secondary); font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; padding: .8rem; white-space: nowrap; }
+.policy-detail-table td { padding: .8rem; border-top: 1px solid var(--mud-palette-lines-default); white-space: nowrap; }
+.policy-detail-table .numeric { text-align: right; }

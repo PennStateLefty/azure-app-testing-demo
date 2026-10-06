@@ -1,0 +1,421 @@
+@page "/dashboard"
+@implements IDisposable
+@inject LifeCoreApi Api
+@inject PersonaState PersonaState
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Underwriting Case Dashboard - LifeCore Suite</PageTitle>
+
+<div class="lc-page-header">
+    <div>
+        <MudText Typo="Typo.overline" Class="lc-page-eyebrow">Underwriting</MudText>
+        <MudText Typo="Typo.h1" HtmlTag="h1">Case Dashboard</MudText>
+        <MudText Typo="Typo.body1" Class="lc-muted">Workload metrics, task queue, and peer guidance for new business underwriting.</MudText>
+    </div>
+    <MudToggleGroup T="bool" Value="_myCasesOnly" ValueChanged="SetScope" SelectionMode="SelectionMode.SingleSelection" Color="Color.Primary" Outlined="true" CheckMark="false" aria-label="Dashboard case scope">
+        <MudToggleItem T="bool" Value="false" Text="All cases" data-testid="dashboard-scope-all" />
+        <MudToggleItem T="bool" Value="true" Text="My cases" Disabled="@(!IsUnderwriter)" data-testid="dashboard-scope-my" />
+    </MudToggleGroup>
+</div>
+
+@if (_loadingKpis)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+}
+
+<MudGrid Spacing="3" Class="mb-6">
+    <MudItem xs="2"><KpiTile TestId="kpi-open-cases" Label="Open cases" Value="@(_kpis?.OpenCases.ToString() ?? "—")" /></MudItem>
+    <MudItem xs="2"><KpiTile TestId="kpi-pending-requirements" Label="Pending requirements" Value="@(_kpis?.CasesPendingRequirements.ToString() ?? "—")" /></MudItem>
+    <MudItem xs="2"><KpiTile TestId="kpi-aps-pending" Label="APS pending" Value="@(_kpis?.ApsPending.ToString() ?? "—")" /></MudItem>
+    <MudItem xs="2"><KpiTile TestId="kpi-avg-days" Label="Avg days in UW" Value="@(_kpis is null ? "—" : DisplayFormat.Number(_kpis.AvgDaysInUnderwriting))" /></MudItem>
+    <MudItem xs="2"><KpiTile TestId="kpi-sla-risk" Label="SLA at risk" Value="@(_kpis?.CasesAtSlaRisk.ToString() ?? "—")" /></MudItem>
+    <MudItem xs="2"><KpiTile TestId="kpi-decisions-today" Label="Decisions today" Value="@(_kpis?.DecisionsToday.ToString() ?? "—")" /></MudItem>
+</MudGrid>
+
+<MudGrid Spacing="3">
+    <MudItem xs="8">
+        <MudPaper Elevation="0" Class="lc-card pa-4">
+            <div class="lc-toolbar mb-4">
+                <SectionTitle Title="Work queue" Subtitle="Task summary grouped by task or by case." />
+                <MudToggleGroup T="WorklistView" Value="_view" ValueChanged="SetWorklistView" SelectionMode="SelectionMode.SingleSelection" Color="Color.Primary" Outlined="true" CheckMark="false" aria-label="Worklist view">
+                    <MudToggleItem T="WorklistView" Value="WorklistView.Task" Text="By Task" data-testid="worklist-view-task" />
+                    <MudToggleItem T="WorklistView" Value="WorklistView.Case" Text="By Case" data-testid="worklist-view-case" />
+                </MudToggleGroup>
+            </div>
+
+            <div class="lc-filters mb-4">
+                <div data-testid="worklist-filter-status">
+                    <MudSelect T="CaseStatus?" Value="_statusFilter" ValueChanged="OnStatusFilterChanged" Label="Status" aria-label="Filter by status" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Class="lc-filter-select">
+                        @foreach (var status in Enum.GetValues<CaseStatus>())
+                        {
+                            <MudSelectItem T="CaseStatus?" Value="@status">@DisplayFormat.EnumLabel(status)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <div data-testid="worklist-filter-product">
+                    <MudSelect T="string" Value="_productFilter" ValueChanged="OnProductFilterChanged" Label="Product" aria-label="Filter by product" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Class="lc-filter-select">
+                        @foreach (var product in _products)
+                        {
+                            <MudSelectItem T="string" Value="@product">@product</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <div data-testid="worklist-filter-priority">
+                    <MudSelect T="Priority?" Value="_priorityFilter" ValueChanged="OnPriorityFilterChanged" Label="Priority" aria-label="Filter by priority" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Class="lc-filter-select">
+                        @foreach (var priority in Enum.GetValues<Priority>())
+                        {
+                            <MudSelectItem T="Priority?" Value="@priority">@DisplayFormat.EnumLabel(priority)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <MudTextField T="string" Value="_search" ValueChanged="OnSearchChanged" Placeholder="Search applicant, case, product" aria-label="Search worklist" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" DebounceInterval="350" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="lc-worklist-search" data-testid="worklist-search" />
+            </div>
+
+            <div class="lc-table-wrap" data-testid="worklist-grid">
+                <MudTable T="WorklistItemDto" @ref="_worklistTable" ServerData="LoadWorklist" Dense="true" Hover="true" Bordered="false" Striped="false" RowsPerPage="10" Elevation="0" Loading="_loadingWorklist" OnRowClick="OnRowClick">
+                    <HeaderContent>
+                        <MudTh><MudTableSortLabel T="WorklistItemDto" SortLabel="caseNumber">Case #</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="WorklistItemDto" SortLabel="applicant">Applicant</MudTableSortLabel></MudTh>
+                        <MudTh>Product</MudTh>
+                        <MudTh><MudTableSortLabel T="WorklistItemDto" SortLabel="faceAmount">Face Amount</MudTableSortLabel></MudTh>
+                        @if (_view == WorklistView.Task)
+                        {
+                            <MudTh>Task type</MudTh>
+                        }
+                        else
+                        {
+                            <MudTh>Open tasks</MudTh>
+                        }
+                        <MudTh><MudTableSortLabel T="WorklistItemDto" SortLabel="priority">Priority</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="WorklistItemDto" SortLabel="ageDays">Age (days)</MudTableSortLabel></MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Assigned to</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Case #" data-testid="worklist-row" data-case-number="@context.CaseNumber"><button type="button" class="lc-row-button" @onclick="() => SelectCase(context.CaseNumber)">@context.CaseNumber</button></MudTd>
+                        <MudTd DataLabel="Applicant">@context.Applicant</MudTd>
+                        <MudTd DataLabel="Product">@context.ProductName</MudTd>
+                        <MudTd DataLabel="Face Amount">@DisplayFormat.Money(context.FaceAmount)</MudTd>
+                        @if (_view == WorklistView.Task)
+                        {
+                            <MudTd DataLabel="Task type">@(context.TaskType is null ? "—" : DisplayFormat.EnumLabel(context.TaskType.Value))</MudTd>
+                        }
+                        else
+                        {
+                            <MudTd DataLabel="Open tasks">@context.OpenTaskCount</MudTd>
+                        }
+                        <MudTd DataLabel="Priority"><span class="@PriorityClass(context.Priority)">@DisplayFormat.EnumLabel(context.Priority)</span></MudTd>
+                        <MudTd DataLabel="Age">@context.AgeDays</MudTd>
+                        <MudTd DataLabel="Status"><StatusChip CaseStatus="context.Status" /></MudTd>
+                        <MudTd DataLabel="Assigned to">@context.AssignedTo</MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudPaper Elevation="0" Class="pa-8 lc-empty-state">No cases match the current queue filters.</MudPaper>
+                    </NoRecordsContent>
+                    <LoadingContent>
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    </LoadingContent>
+                    <PagerContent>
+                        <div class="lc-pager" data-testid="worklist-pager">
+                            <MudTablePager PageSizeOptions="new[] { 10, 25, 50 }" />
+                            <MudText Typo="Typo.caption" data-testid="worklist-page-info">Page @(_currentPage + 1) · @_totalItems items</MudText>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" Disabled="@(!CanPageNext)" OnClick="NextPage" data-testid="worklist-next-page">Next page</MudButton>
+                        </div>
+                    </PagerContent>
+                </MudTable>
+            </div>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="4">
+        <MudPaper Elevation="0" Class="lc-card pa-4 mb-3" data-testid="chart-cases-by-status">
+            <SectionTitle Title="Cases by status" />
+            @if (_statusSeries.Count > 0)
+            {
+                <MudChart T="double" ChartType="ChartType.Donut" ChartSeries="_statusSeries" ChartLabels="_statusLabels" ChartOptions="_chartOptions" Width="100%" Height="270px" />
+            }
+            else { <MudSkeleton Height="270px" /> }
+        </MudPaper>
+        <MudPaper Elevation="0" Class="lc-card pa-4" data-testid="chart-weekly-intake">
+            <SectionTitle Title="Weekly intake vs decisions" />
+            @if (_weeklySeries.Count > 0)
+            {
+                <MudChart T="double" ChartType="ChartType.Bar" ChartSeries="_weeklySeries" ChartLabels="_weeklyLabels" ChartOptions="_chartOptions" Width="100%" Height="270px" />
+            }
+            else { <MudSkeleton Height="270px" /> }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudDrawer Open="_summaryOpen" OpenChanged="v => _summaryOpen = v" Anchor="Anchor.End" Variant="DrawerVariant.Temporary" Elevation="1" Class="lc-summary-drawer" Overlay="true" data-testid="case-summary-panel">
+    <div class="lc-summary-panel">
+        <div class="d-flex justify-space-between align-start mb-4">
+            <SectionTitle Title="Case summary" Subtitle="Selected underwriting case" />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Close case summary" OnClick="CloseSummary" data-testid="case-summary-close" />
+        </div>
+        @if (_loadingCase)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_selectedCase is not null)
+        {
+            <MudText Typo="Typo.h3">@_selectedCase.CaseNumber</MudText>
+            <MudText Typo="Typo.subtitle1" Class="mb-3">@_selectedCase.ApplicantName · @_selectedCase.ProductName</MudText>
+            <StatusChip CaseStatus="_selectedCase.Status" />
+            <MudDivider Class="my-4" />
+            <MudGrid Spacing="2" Class="mb-4">
+                <MudItem xs="6"><div class="lc-summary-metric"><MudText Typo="Typo.caption">Face amount</MudText><MudText Typo="Typo.h6">@DisplayFormat.Money(_selectedCase.FaceAmount)</MudText></div></MudItem>
+                <MudItem xs="6"><div class="lc-summary-metric"><MudText Typo="Typo.caption">Days open</MudText><MudText Typo="Typo.h6">@_selectedCase.DaysOpen</MudText></div></MudItem>
+                <MudItem xs="6"><div class="lc-summary-metric"><MudText Typo="Typo.caption">Priority</MudText><MudText Typo="Typo.h6">@DisplayFormat.EnumLabel(_selectedCase.Priority)</MudText></div></MudItem>
+                <MudItem xs="6"><div class="lc-summary-metric"><MudText Typo="Typo.caption">Risk class</MudText><MudText Typo="Typo.h6">@(_selectedCase.SuggestedRiskClass is null ? "Pending" : DisplayFormat.EnumLabel(_selectedCase.SuggestedRiskClass.Value))</MudText></div></MudItem>
+            </MudGrid>
+            <MudText Typo="Typo.h6" Class="mb-2">Requirements</MudText>
+            <MudText Typo="Typo.body2">Ordered @_selectedCase.RequirementCounts.Ordered · Received @_selectedCase.RequirementCounts.Received · Outstanding @_selectedCase.RequirementCounts.Outstanding</MudText>
+            <MudText Typo="Typo.body2" Class="mt-2">Alerts: @_selectedCase.Alerts.Count</MudText>
+            <MudButton FullWidth="true" Color="Color.Primary" Variant="Variant.Filled" Class="mt-4" OnClick="OpenWorkbench" data-testid="case-summary-open-workbench">Open in Workbench</MudButton>
+
+            <MudDivider Class="my-5" />
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Chat" OnClick="ToggleChat" data-testid="chat-toggle">@(_chatOpen ? "Hide peer chat" : "Show peer chat")</MudButton>
+            <MudCollapse Expanded="_chatOpen">
+                <div class="lc-chat-panel mt-3" data-testid="chat-panel">
+                    @if (_loadingChat)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                    else if (_chat.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="lc-muted">No peer guidance yet.</MudText>
+                    }
+                    else
+                    {
+                        @foreach (var message in _chat)
+                        {
+                            <div class="lc-chat-message" data-testid="chat-message">
+                                <MudText Typo="Typo.subtitle2">@message.Author</MudText>
+                                <MudText Typo="Typo.body2">@message.Text</MudText>
+                                <MudText Typo="Typo.caption" Class="lc-muted">@DisplayFormat.DateTime(message.SentAt)</MudText>
+                            </div>
+                        }
+                    }
+                    <MudTextField T="string" @bind-Value="_chatDraft" Placeholder="Ask peers for guidance" aria-label="Peer chat message" Lines="2" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-3" data-testid="chat-input" />
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(string.IsNullOrWhiteSpace(_chatDraft))" OnClick="SendChat" data-testid="chat-send">Send</MudButton>
+                </div>
+            </MudCollapse>
+        }
+    </div>
+</MudDrawer>
+
+@code {
+    private DashboardKpisDto? _kpis;
+    private MudTable<WorklistItemDto>? _worklistTable;
+    private bool _loadingKpis;
+    private bool _loadingWorklist;
+    private bool _myCasesOnly;
+    private WorklistView _view = WorklistView.Task;
+    private CaseStatus? _statusFilter;
+    private string? _productFilter;
+    private Priority? _priorityFilter;
+    private string? _search;
+    private int _currentPage;
+    private int _pageSize = 10;
+    private int _totalItems;
+    private string[] _products = [];
+    private bool _summaryOpen;
+    private bool _loadingCase;
+    private CaseDetailDto? _selectedCase;
+    private bool _chatOpen;
+    private bool _loadingChat;
+    private string? _chatDraft;
+    private List<ChatMessageDto> _chat = [];
+    private string[] _statusLabels = [];
+    private List<ChartSeries<double>> _statusSeries = [];
+    private string[] _weeklyLabels = [];
+    private List<ChartSeries<double>> _weeklySeries = [];
+    private readonly ChartOptions _chartOptions = new() { ChartPalette = [LifeCoreTheme.Purple, LifeCoreTheme.DarkPurple, LifeCoreTheme.DeepPurple, "#107C10", "#F7630C", "#D13438"] };
+
+    private bool IsUnderwriter => PersonaState.Current.Role == "Underwriter";
+    private string? UnderwriterFilter => _myCasesOnly && IsUnderwriter ? PersonaState.Current.DisplayName : null;
+    private bool CanPageNext => (_currentPage + 1) * _pageSize < _totalItems;
+
+    protected override async Task OnInitializedAsync()
+    {
+        PersonaState.Changed += OnPersonaChanged;
+        await LoadKpis();
+    }
+
+    private async void OnPersonaChanged()
+    {
+        if (!IsUnderwriter) _myCasesOnly = false;
+        await LoadKpis();
+        await ReloadWorklist();
+    }
+
+    private async Task LoadKpis()
+    {
+        try
+        {
+            _loadingKpis = true;
+            _kpis = await Api.GetKpisAsync(UnderwriterFilter);
+            BuildCharts();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Dashboard KPIs could not be loaded: {ex.Message}", MudBlazor.Severity.Error);
+        }
+        finally
+        {
+            _loadingKpis = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task<TableData<WorklistItemDto>> LoadWorklist(TableState state, CancellationToken ct)
+    {
+        _loadingWorklist = true;
+        _currentPage = state.Page;
+        _pageSize = state.PageSize;
+        try
+        {
+            var sort = ToSort(state);
+            var result = await Api.GetWorklistAsync(_view, _statusFilter, _productFilter, _priorityFilter, _search, UnderwriterFilter, state.Page + 1, state.PageSize, sort, ct);
+            _totalItems = result?.TotalCount ?? 0;
+            var items = result?.Items ?? Array.Empty<WorklistItemDto>();
+            _products = [.. _products.Concat(items.Select(i => i.ProductName)).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().OrderBy(p => p)];
+            return new TableData<WorklistItemDto> { Items = items, TotalItems = _totalItems };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Work queue could not be loaded: {ex.Message}", MudBlazor.Severity.Error);
+            return new TableData<WorklistItemDto> { Items = Array.Empty<WorklistItemDto>(), TotalItems = 0 };
+        }
+        finally
+        {
+            _loadingWorklist = false;
+        }
+    }
+
+    private static string? ToSort(TableState state)
+    {
+        if (string.IsNullOrWhiteSpace(state.SortLabel) || state.SortDirection == SortDirection.None) return null;
+        return state.SortLabel + (state.SortDirection == SortDirection.Descending ? "_desc" : "_asc");
+    }
+
+    private void BuildCharts()
+    {
+        if (_kpis is null) return;
+        _statusLabels = [.. _kpis.CasesByStatus.Select(s => DisplayFormat.EnumLabel(s.Status))];
+        _statusSeries = [new ChartSeries<double>([.. _kpis.CasesByStatus.Select(s => (double)s.Count)]) { Name = "Cases" }];
+        _weeklyLabels = [.. _kpis.WeeklyIntake.Select(w => w.WeekStart.ToString("MMM d"))];
+        _weeklySeries =
+        [
+            new ChartSeries<double>([.. _kpis.WeeklyIntake.Select(w => (double)w.Intake)]) { Name = "Intake" },
+            new ChartSeries<double>([.. _kpis.WeeklyIntake.Select(w => (double)w.Decisions)]) { Name = "Decisions" }
+        ];
+    }
+
+    private async Task SetScope(bool value)
+    {
+        _myCasesOnly = value && IsUnderwriter;
+        await LoadKpis();
+        await ReloadWorklist();
+    }
+
+    private async Task SetWorklistView(WorklistView value)
+    {
+        _view = value;
+        await ReloadWorklist();
+    }
+
+    private async Task OnStatusFilterChanged(CaseStatus? value) { _statusFilter = value; await ReloadWorklist(); }
+    private async Task OnProductFilterChanged(string value) { _productFilter = value; await ReloadWorklist(); }
+    private async Task OnPriorityFilterChanged(Priority? value) { _priorityFilter = value; await ReloadWorklist(); }
+    private async Task OnSearchChanged(string value) { _search = value; await ReloadWorklist(); }
+
+    private Task ReloadWorklist() => _worklistTable?.ReloadServerData() ?? Task.CompletedTask;
+
+    private async Task NextPage()
+    {
+        if (_worklistTable is not null && CanPageNext)
+        {
+            _worklistTable.NavigateTo(_currentPage + 1);
+        }
+    }
+
+    private void OnRowClick(TableRowClickEventArgs<WorklistItemDto> args)
+    {
+        if (args.Item is not null) _ = SelectCase(args.Item.CaseNumber);
+    }
+
+    private async Task SelectCase(string caseNumber)
+    {
+        try
+        {
+            _summaryOpen = true;
+            _loadingCase = true;
+            _chatOpen = false;
+            _selectedCase = await Api.GetCaseAsync(caseNumber);
+            if (_selectedCase is null) Snackbar.Add($"Case {caseNumber} was not found.", MudBlazor.Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Case summary could not be loaded: {ex.Message}", MudBlazor.Severity.Error);
+        }
+        finally
+        {
+            _loadingCase = false;
+        }
+    }
+
+    private void CloseSummary() => _summaryOpen = false;
+
+    private void OpenWorkbench()
+    {
+        if (_selectedCase is not null) Navigation.NavigateTo($"/cases/{_selectedCase.CaseNumber}");
+    }
+
+    private async Task ToggleChat()
+    {
+        _chatOpen = !_chatOpen;
+        if (_chatOpen && _selectedCase is not null) await LoadChat(_selectedCase.CaseNumber);
+    }
+
+    private async Task LoadChat(string caseNumber)
+    {
+        try
+        {
+            _loadingChat = true;
+            _chat = [.. (await Api.GetChatAsync(caseNumber) ?? [])];
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Peer chat could not be loaded: {ex.Message}", MudBlazor.Severity.Error);
+        }
+        finally
+        {
+            _loadingChat = false;
+        }
+    }
+
+    private async Task SendChat()
+    {
+        if (_selectedCase is null || string.IsNullOrWhiteSpace(_chatDraft)) return;
+        var result = await Api.PostChatAsync(_selectedCase.CaseNumber, new PostChatMessageRequest(PersonaState.Current.DisplayName, _chatDraft.Trim()));
+        if (!result.IsSuccess || result.Value is null)
+        {
+            Snackbar.Add(result.ErrorMessage, MudBlazor.Severity.Error);
+            return;
+        }
+        _chatDraft = string.Empty;
+        _chat.Add(result.Value);
+    }
+
+    private static string PriorityClass(Priority priority) => priority switch
+    {
+        Priority.Rush => "lc-priority-rush",
+        Priority.High => "lc-priority-high",
+        _ => string.Empty
+    };
+
+    public void Dispose() => PersonaState.Changed -= OnPersonaChanged;
+}

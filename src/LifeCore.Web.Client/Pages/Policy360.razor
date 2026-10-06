@@ -1,0 +1,592 @@
+@page "/policies/{PolicyNumber}"
+@using System.Globalization
+@using Microsoft.AspNetCore.Components
+@using MudBlazor
+@using LifeCore.Contracts
+@using LifeCore.Web.Client.Components.Policy
+@using LifeCore.Web.Client.Services
+@inject LifeCoreApi Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_policy is null ? "Policy 360" : $"{_policy.PolicyNumber} | Policy 360")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="policy360-page py-5">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="mb-2" />
+
+    @if (_loadingPolicy)
+    {
+        <div class="loading-region" role="status" aria-live="polite">
+            <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            <MudText Typo="Typo.body2">Loading policy…</MudText>
+        </div>
+    }
+    else if (_notFound)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="policy-not-found">
+            Policy @PolicyNumber was not found. Return to <MudLink Href="/policies">policy search</MudLink>.
+        </MudAlert>
+    }
+    else if (_policy is not null)
+    {
+        <MudStack Spacing="3">
+            <MudPaper Class="policy-header pa-4" Elevation="0" Outlined="true" data-testid="policy-header">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="7">
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="header-title-row">
+                                <MudText Typo="Typo.overline" Color="Color.Primary">Policy 360</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="@StatusColor(_policy.Status)" Variant="Variant.Filled" data-testid="policy-status">@DisplayEnum(_policy.Status)</MudChip>
+                            </MudStack>
+                            <MudText Typo="Typo.h4" HtmlTag="h1">@_policy.PolicyNumber</MudText>
+                            <MudText Typo="Typo.subtitle1">@_policy.ProductName · @DisplayEnum(_policy.ProductLine) / @DisplayEnum(_policy.ProductType)</MudText>
+                        </MudStack>
+                    </MudItem>
+                    <MudItem xs="12" md="5">
+                        <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2" Class="pending-wrap">
+                            <MudBadge Content="@_policy.PendingTransactionCount" Color="Color.Primary" Overlap="true" data-testid="pending-transactions-count">
+                                <MudChip T="string" Color="Color.Tertiary" Variant="Variant.Outlined">Pending transactions</MudChip>
+                            </MudBadge>
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+
+                <div class="metric-grid mt-4">
+                    <Metric Label="Issue date" Value="@Date(_policy.IssueDate)" />
+                    <Metric Label="Owner" Value="@_policy.Owner.Name" />
+                    <Metric Label="Insured" Value="@_policy.Insured.Name" />
+                    <Metric Label="Agent" Value="@_policy.AgentName" />
+                    <Metric Label="Face amount" Value="@Currency(_policy.FaceAmount)" AlignRight="true" />
+                    <Metric Label="Account value" Value="@Currency(_policy.AccountValue)" AlignRight="true" />
+                    <Metric Label="CSV" Value="@Currency(_policy.CashSurrenderValue)" AlignRight="true" />
+                </div>
+            </MudPaper>
+
+            <MudPaper Class="pa-3" Elevation="0" Outlined="true" data-testid="service-actions">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="actions-stack">
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary">Service actions</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Create pending non-financial transactions and in-force quotes.</MudText>
+                    </div>
+                    <MudStack Row="true" Spacing="1" Class="actions-buttons">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenAddress" data-testid="action-change-address" aria-label="Open change address action">Change Address</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="OpenBeneficiariesAsync" data-testid="action-change-beneficiary" aria-label="Open change beneficiary action">Change Beneficiary</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" OnClick="OpenQuote" data-testid="action-quote" aria-label="Open loan or withdrawal quote action">Quote Loan / Withdrawal</MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+
+            @if (_activeAction is not null)
+            {
+                <MudPaper Class="action-drawer pa-4" Elevation="4" Outlined="true">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.h6">@ActionTitle</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="CloseAction" aria-label="Close service action" />
+                    </MudStack>
+                    @if (_activeAction == ActionKind.Address)
+                    {
+                        <EditForm Model="_addressModel" OnSubmit="SubmitAddressAsync">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="_addressModel.Line1" Label="Line 1" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="address-line1" aria-label="Address line 1" /></MudItem>
+                                <MudItem xs="12" md="6"><MudTextField T="string" @bind-Value="_addressModel.Line2" Label="Line 2" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="address-line2" aria-label="Address line 2" /></MudItem>
+                                <MudItem xs="12" md="4"><MudTextField T="string" @bind-Value="_addressModel.City" Label="City" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="address-city" aria-label="Address city" /></MudItem>
+                                <MudItem xs="12" md="4"><MudTextField T="string" @bind-Value="_addressModel.State" Label="State" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="address-state" aria-label="Address state" /></MudItem>
+                                <MudItem xs="12" md="4"><MudTextField T="string" @bind-Value="_addressModel.PostalCode" Label="Postal" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="address-postal" aria-label="Address postal code" /></MudItem>
+                                <MudItem xs="12"><MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="_submittingAction" data-testid="address-submit" aria-label="Submit change address">Submit address change</MudButton></MudItem>
+                            </MudGrid>
+                        </EditForm>
+                    }
+                    else if (_activeAction == ActionKind.Beneficiaries)
+                    {
+                        @if (!string.IsNullOrWhiteSpace(_beneficiaryError))
+                        {
+                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3" data-testid="beneficiary-error">@_beneficiaryError</MudAlert>
+                        }
+                        <EditForm Model="_beneficiaryEdits" OnSubmit="SubmitBeneficiariesAsync">
+                            <div class="beneficiary-edit-list">
+                                @for (var i = 0; i < _beneficiaryEdits.Count; i++)
+                                {
+                                    var edit = _beneficiaryEdits[i];
+                                    <div class="beneficiary-edit-row" @key="edit.ClientId">
+                                        <MudTextField T="string" @bind-Value="edit.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="beneficiary-name" aria-label="Beneficiary name" />
+                                        <MudTextField T="string" @bind-Value="edit.Relationship" Label="Relationship" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="beneficiary-relationship" aria-label="Beneficiary relationship" />
+                                        <MudSelect T="BeneficiaryType" @bind-Value="edit.Type" Label="Type" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="beneficiary-type" aria-label="Beneficiary type">
+                                            <MudSelectItem Value="BeneficiaryType.Primary">Primary</MudSelectItem>
+                                            <MudSelectItem Value="BeneficiaryType.Contingent">Contingent</MudSelectItem>
+                                        </MudSelect>
+                                        <MudNumericField T="decimal" @bind-Value="edit.Percent" Label="Percent" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="100" Step="1" Format="N2" data-testid="beneficiary-percent" aria-label="Beneficiary percent" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="() => RemoveBeneficiary(edit)" Disabled="_beneficiaryEdits.Count <= 1" data-testid="beneficiary-remove-row" aria-label="Remove beneficiary row" />
+                                    </div>
+                                }
+                            </div>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mt-3 beneficiary-total-row">
+                                <MudText Typo="Typo.body2" data-testid="beneficiary-primary-total">Primary total: @Percent(PrimaryTotal) @(PrimaryTotal == 100 ? "" : "— must total 100%")</MudText>
+                                <MudStack Row="true" Spacing="1">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="AddBeneficiary" data-testid="beneficiary-add-row" aria-label="Add beneficiary row">Add row</MudButton>
+                                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="_submittingAction" data-testid="beneficiary-submit" aria-label="Submit beneficiary change">Submit beneficiaries</MudButton>
+                                </MudStack>
+                            </MudStack>
+                        </EditForm>
+                    }
+                    else if (_activeAction == ActionKind.Quote)
+                    {
+                        @if (!string.IsNullOrWhiteSpace(_quoteError))
+                        {
+                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3" data-testid="quote-error">@_quoteError</MudAlert>
+                        }
+                        <EditForm Model="_quoteModel" OnSubmit="SubmitQuoteAsync">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12" md="4">
+                                    <MudSelect T="QuoteKind" @bind-Value="_quoteModel.Kind" Label="Kind" Variant="Variant.Outlined" Margin="Margin.Dense" data-testid="quote-kind" aria-label="Quote kind">
+                                        <MudSelectItem Value="QuoteKind.Loan">Loan</MudSelectItem>
+                                        <MudSelectItem Value="QuoteKind.Withdrawal">Withdrawal</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" md="4"><MudNumericField T="decimal" @bind-Value="_quoteModel.Amount" Label="Amount" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Step="100" Format="C2" data-testid="quote-amount" aria-label="Quote amount" /></MudItem>
+                                <MudItem xs="12" md="4"><MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="_submittingAction" data-testid="quote-submit" aria-label="Submit quote">Run quote</MudButton></MudItem>
+                            </MudGrid>
+                        </EditForm>
+                        @if (_quoteResult is not null)
+                        {
+                            <MudPaper Class="quote-result pa-3 mt-3" Elevation="0" Outlined="true" data-testid="quote-result">
+                                <div class="metric-grid compact">
+                                    <Metric Label="Requested" Value="@Currency(_quoteResult.RequestedAmount)" AlignRight="true" />
+                                    <Metric Label="Max available" Value="@Currency(_quoteResult.MaxAvailable)" AlignRight="true" />
+                                    <Metric Label="Interest rate" Value="@Percent(_quoteResult.InterestRate)" AlignRight="true" />
+                                    <Metric Label="Surrender charge" Value="@Currency(_quoteResult.SurrenderCharge)" AlignRight="true" />
+                                    <div data-testid="quote-net-proceeds"><Metric Label="Net proceeds" Value="@Currency(_quoteResult.NetProceeds)" AlignRight="true" /></div>
+                                </div>
+                            </MudPaper>
+                        }
+                    }
+                </MudPaper>
+            }
+
+            <MudPaper Class="tabs-shell" Elevation="0" Outlined="true">
+                <MudTabs ActivePanelIndex="_activeTab" ActivePanelIndexChanged="OnTabChangedAsync" Rounded="false" Color="Color.Primary" data-testid="policy-tabs">
+                    <MudTabPanel>
+                        <TabContent><span data-testid="tab-coverages">Coverages &amp; Riders</span></TabContent>
+                        <ChildContent>@CoveragesPanel()</ChildContent>
+                    </MudTabPanel>
+                    <MudTabPanel>
+                        <TabContent><span data-testid="tab-parties">Parties</span></TabContent>
+                        <ChildContent>@PartiesPanel()</ChildContent>
+                    </MudTabPanel>
+                    <MudTabPanel>
+                        <TabContent><span data-testid="tab-billing">Billing</span></TabContent>
+                        <ChildContent>@BillingPanel()</ChildContent>
+                    </MudTabPanel>
+                    <MudTabPanel>
+                        <TabContent><span data-testid="tab-values">Values</span></TabContent>
+                        <ChildContent>@ValuesPanel()</ChildContent>
+                    </MudTabPanel>
+                    <MudTabPanel>
+                        <TabContent><span data-testid="tab-transactions">Transactions</span></TabContent>
+                        <ChildContent>@TransactionsPanel()</ChildContent>
+                    </MudTabPanel>
+                </MudTabs>
+            </MudPaper>
+        </MudStack>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public string PolicyNumber { get; set; } = string.Empty;
+
+    private static readonly CultureInfo Us = CultureInfo.GetCultureInfo("en-US");
+    private PolicyDetailDto? _policy;
+    private bool _loadingPolicy = true;
+    private bool _notFound;
+    private int _activeTab;
+    private ActionKind? _activeAction;
+    private bool _submittingAction;
+
+    private IReadOnlyList<CoverageDto>? _coverages;
+    private IReadOnlyList<BeneficiaryDto>? _beneficiaries;
+    private BillingDto? _billing;
+    private ValuesDto? _values;
+    private IReadOnlyList<TransactionDto>? _transactions;
+    private readonly HashSet<int> _loadedTabs = [];
+
+    private AddressEditModel _addressModel = new();
+    private readonly List<BeneficiaryEditModel> _beneficiaryEdits = [];
+    private string? _beneficiaryError;
+    private QuoteEditModel _quoteModel = new();
+    private QuoteResultDto? _quoteResult;
+    private string? _quoteError;
+
+    private List<BreadcrumbItem> _breadcrumbs =>
+    [
+        new("Policies", href: "/policies"),
+        new(PolicyNumber, href: null, disabled: true)
+    ];
+
+    private string ActionTitle => _activeAction switch
+    {
+        ActionKind.Address => "Change address",
+        ActionKind.Beneficiaries => "Change beneficiary",
+        ActionKind.Quote => "Quote loan / withdrawal",
+        _ => string.Empty
+    };
+
+    private decimal PrimaryTotal => _beneficiaryEdits.Where(b => b.Type == BeneficiaryType.Primary).Sum(b => b.Percent);
+    private bool HasFunds => _values?.Funds.Count > 0;
+    private string[] FundLabels => _values?.Funds.Select(f => f.FundName).ToArray() ?? [];
+    private List<ChartSeries<double>> FundSeries => [new ChartSeries<double> { Name = "Allocation", Data = _values?.Funds.Select(f => (double)f.Value).ToArray() ?? [] }];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadPolicyAsync();
+        if (!_notFound) await LoadTabAsync(0);
+    }
+
+    private async Task LoadPolicyAsync()
+    {
+        _loadingPolicy = true;
+        _notFound = false;
+        try
+        {
+            _policy = await Api.GetPolicyAsync(PolicyNumber);
+            _notFound = _policy is null;
+            if (_policy is not null)
+            {
+                _addressModel = AddressEditModel.From(_policy.Owner.Address);
+            }
+        }
+        finally
+        {
+            _loadingPolicy = false;
+        }
+    }
+
+    private async Task OnTabChangedAsync(int index)
+    {
+        _activeTab = index;
+        await LoadTabAsync(index);
+    }
+
+    private async Task LoadTabAsync(int index, bool force = false)
+    {
+        if (_policy is null || (!force && _loadedTabs.Contains(index))) return;
+        switch (index)
+        {
+            case 0:
+                _coverages = await Api.GetCoveragesAsync(_policy.PolicyNumber) ?? [];
+                break;
+            case 1:
+                _beneficiaries = await Api.GetBeneficiariesAsync(_policy.PolicyNumber) ?? [];
+                break;
+            case 2:
+                _billing = await Api.GetBillingAsync(_policy.PolicyNumber);
+                break;
+            case 3:
+                _values = await Api.GetValuesAsync(_policy.PolicyNumber);
+                break;
+            case 4:
+                _transactions = (await Api.GetTransactionsAsync(_policy.PolicyNumber) ?? []).OrderByDescending(t => t.CreatedAt).ToList();
+                break;
+        }
+        _loadedTabs.Add(index);
+    }
+
+    private void OpenAddress()
+    {
+        if (_policy is not null) _addressModel = AddressEditModel.From(_policy.Owner.Address);
+        _activeAction = ActionKind.Address;
+    }
+
+    private async Task OpenBeneficiariesAsync()
+    {
+        await LoadTabAsync(1);
+        _beneficiaryError = null;
+        _beneficiaryEdits.Clear();
+        foreach (var beneficiary in _beneficiaries ?? [])
+        {
+            _beneficiaryEdits.Add(BeneficiaryEditModel.From(beneficiary));
+        }
+        if (_beneficiaryEdits.Count == 0) AddBeneficiary();
+        _activeAction = ActionKind.Beneficiaries;
+    }
+
+    private void OpenQuote()
+    {
+        _quoteError = null;
+        _quoteResult = null;
+        _quoteModel = new QuoteEditModel { Kind = QuoteKind.Loan, Amount = 1000m };
+        _activeAction = ActionKind.Quote;
+    }
+
+    private void CloseAction() => _activeAction = null;
+
+    private async Task SubmitAddressAsync()
+    {
+        if (_policy is null) return;
+        _submittingAction = true;
+        try
+        {
+            var request = new ChangeAddressRequest(new AddressDto(_addressModel.Line1, _addressModel.Line2, _addressModel.City, _addressModel.State, _addressModel.PostalCode));
+            var result = await Api.ChangeAddressAsync(_policy.PolicyNumber, request);
+            if (!result.IsSuccess)
+            {
+                Snackbar.Add(result.ErrorMessage, Severity.Error);
+                return;
+            }
+            Snackbar.Add("Address change submitted.", Severity.Success);
+            await RefreshAfterTransactionAsync(refreshBeneficiaries: false);
+            _activeAction = null;
+        }
+        finally
+        {
+            _submittingAction = false;
+        }
+    }
+
+    private void AddBeneficiary() => _beneficiaryEdits.Add(new BeneficiaryEditModel { ClientId = Guid.NewGuid(), Type = BeneficiaryType.Primary, Percent = 0m });
+    private void RemoveBeneficiary(BeneficiaryEditModel model) => _beneficiaryEdits.Remove(model);
+
+    private async Task SubmitBeneficiariesAsync()
+    {
+        if (_policy is null) return;
+        _submittingAction = true;
+        _beneficiaryError = null;
+        try
+        {
+            var request = new UpdateBeneficiariesRequest(_beneficiaryEdits
+                .Select(b => new BeneficiaryInput(b.Name, b.Relationship, b.Type, b.Percent))
+                .ToList());
+            var result = await Api.UpdateBeneficiariesAsync(_policy.PolicyNumber, request);
+            if (!result.IsSuccess)
+            {
+                _beneficiaryError = result.ErrorMessage;
+                return;
+            }
+            Snackbar.Add("Beneficiary change submitted.", Severity.Success);
+            await RefreshAfterTransactionAsync(refreshBeneficiaries: true);
+            _activeAction = null;
+        }
+        finally
+        {
+            _submittingAction = false;
+        }
+    }
+
+    private async Task SubmitQuoteAsync()
+    {
+        if (_policy is null) return;
+        _submittingAction = true;
+        _quoteError = null;
+        try
+        {
+            var result = await Api.QuoteAsync(_policy.PolicyNumber, new QuoteRequest(_quoteModel.Kind, _quoteModel.Amount));
+            if (!result.IsSuccess || result.Value is null)
+            {
+                _quoteError = result.ErrorMessage;
+                return;
+            }
+            _quoteResult = result.Value;
+            Snackbar.Add("Quote created and transaction queued.", Severity.Success);
+            await RefreshAfterTransactionAsync(refreshBeneficiaries: false);
+        }
+        finally
+        {
+            _submittingAction = false;
+        }
+    }
+
+    private async Task RefreshAfterTransactionAsync(bool refreshBeneficiaries)
+    {
+        await LoadPolicyAsync();
+        await LoadTabAsync(4, force: true);
+        if (refreshBeneficiaries) await LoadTabAsync(1, force: true);
+    }
+
+    private RenderFragment CoveragesPanel() => @<div class="tab-panel-content">
+        @if (_coverages is null)
+        {
+            <PanelLoader />
+        }
+        else
+        {
+            <DataTable TestId="coverages-grid" Label="Coverages and riders">
+                <Header><tr><th>Name</th><th>Kind</th><th class="numeric">Amount</th><th class="numeric">Annual premium</th><th>Effective</th><th>Status</th></tr></Header>
+                <Rows>
+                    @foreach (var c in _coverages)
+                    {
+                        <tr data-testid="coverage-row"><td>@c.Name</td><td>@(c.IsRider ? "Rider" : "Base coverage")</td><td class="numeric">@Currency(c.Amount)</td><td class="numeric">@Currency(c.AnnualPremium)</td><td>@Date(c.EffectiveDate)</td><td>@c.Status</td></tr>
+                    }
+                </Rows>
+            </DataTable>
+        }
+    </div>;
+
+    private RenderFragment PartiesPanel() => @<div class="tab-panel-content">
+        @if (_policy is not null)
+        {
+            <MudGrid Spacing="2" Class="mb-3">
+                <MudItem xs="12" md="6">@PartyCard("Owner", _policy.Owner, "party-owner")</MudItem>
+                <MudItem xs="12" md="6">@PartyCard("Insured", _policy.Insured, "party-insured")</MudItem>
+            </MudGrid>
+        }
+        @if (_beneficiaries is null)
+        {
+            <PanelLoader />
+        }
+        else
+        {
+            <DataTable TestId="beneficiaries-grid" Label="Beneficiaries">
+                <Header><tr><th>Name</th><th>Relationship</th><th>Type</th><th class="numeric">Percent</th></tr></Header>
+                <Rows>
+                    @foreach (var b in _beneficiaries)
+                    {
+                        <tr data-testid="beneficiary-row"><td>@b.Name</td><td>@b.Relationship</td><td>@DisplayEnum(b.Type)</td><td class="numeric">@Percent(b.Percent / 100m)</td></tr>
+                    }
+                </Rows>
+            </DataTable>
+        }
+    </div>;
+
+    private RenderFragment PartyCard(string title, PartyDto party, string testId) => @<MudPaper Class="party-card pa-3" Elevation="0" Outlined="true" data-testid="@testId">
+        <MudText Typo="Typo.overline" Color="Color.Primary">@title</MudText>
+        <MudText Typo="Typo.h6">@party.Name</MudText>
+        <MudText Typo="Typo.body2">DOB @Date(party.DateOfBirth) · @party.Gender · @MaskSsn(party.SsnLast4)</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">@FormatAddress(party.Address)</MudText>
+    </MudPaper>;
+
+    private RenderFragment BillingPanel() => @<div class="tab-panel-content">
+        @if (_billing is null)
+        {
+            <PanelLoader />
+        }
+        else
+        {
+            <MudPaper Class="summary-card pa-3 mb-3" Elevation="0" Outlined="true" data-testid="billing-summary">
+                <div class="metric-grid compact">
+                    <Metric Label="Mode" Value="@DisplayEnum(_billing.Mode)" />
+                    <Metric Label="Modal premium" Value="@Currency(_billing.ModalPremium)" AlignRight="true" />
+                    <Metric Label="Next due date" Value="@(_billing.NextDueDate is null ? "N/A" : Date(_billing.NextDueDate.Value))" />
+                    <Metric Label="Payment method" Value="@_billing.PaymentMethod" />
+                </div>
+            </MudPaper>
+            <DataTable TestId="payments-grid" Label="Payment history">
+                <Header><tr><th>Date</th><th class="numeric">Amount</th><th>Method</th><th>Status</th></tr></Header>
+                <Rows>
+                    @foreach (var p in _billing.Payments.OrderByDescending(p => p.Date))
+                    {
+                        <tr><td>@Date(p.Date)</td><td class="numeric">@Currency(p.Amount)</td><td>@p.Method</td><td>@p.Status</td></tr>
+                    }
+                </Rows>
+            </DataTable>
+        }
+    </div>;
+
+    private RenderFragment ValuesPanel() => @<div class="tab-panel-content">
+        @if (_values is null)
+        {
+            <PanelLoader />
+        }
+        else
+        {
+            <MudPaper Class="summary-card pa-3 mb-3" Elevation="0" Outlined="true" data-testid="values-summary">
+                <div class="metric-grid compact">
+                    <Metric Label="Account value" Value="@Currency(_values.AccountValue)" AlignRight="true" />
+                    <Metric Label="CSV" Value="@Currency(_values.CashSurrenderValue)" AlignRight="true" />
+                    <Metric Label="Surrender charge" Value="@Currency(_values.SurrenderCharge)" AlignRight="true" />
+                    <Metric Label="Loan balance" Value="@Currency(_values.LoanBalance)" AlignRight="true" />
+                    <Metric Label="Max loan" Value="@Currency(_values.MaxLoanAvailable)" AlignRight="true" />
+                </div>
+            </MudPaper>
+            @if (HasFunds)
+            {
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="7">
+                        <DataTable TestId="funds-grid" Label="Fund allocations">
+                            <Header><tr><th>Fund</th><th class="numeric">Allocation</th><th class="numeric">Value</th></tr></Header>
+                            <Rows>
+                                @foreach (var f in _values.Funds)
+                                {
+                                    <tr><td>@f.FundName</td><td class="numeric">@Percent(f.AllocationPercent / 100m)</td><td class="numeric">@Currency(f.Value)</td></tr>
+                                }
+                            </Rows>
+                        </DataTable>
+                    </MudItem>
+                    <MudItem xs="12" md="5">
+                        <MudPaper Class="pa-3 chart-card" Elevation="0" Outlined="true" data-testid="funds-chart">
+                            <MudChart T="double" ChartType="ChartType.Donut" ChartSeries="FundSeries" ChartLabels="FundLabels" Width="100%" Height="300px" />
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            }
+        }
+    </div>;
+
+    private RenderFragment TransactionsPanel() => @<div class="tab-panel-content">
+        @if (_transactions is null)
+        {
+            <PanelLoader />
+        }
+        else
+        {
+            <DataTable TestId="transactions-grid" Label="Transaction history">
+                <Header><tr><th>Created</th><th>Effective</th><th>Type</th><th>Status</th><th class="numeric">Amount</th><th>Description</th></tr></Header>
+                <Rows>
+                    @foreach (var t in _transactions)
+                    {
+                        <tr data-testid="transaction-row" data-type="@t.Type" data-status="@t.Status"><td>@t.CreatedAt.ToLocalTime().ToString("MM/dd/yyyy h:mm tt", Us)</td><td>@Date(t.EffectiveDate)</td><td>@DisplayEnum(t.Type)</td><td><MudChip T="string" Size="Size.Small" Color="@TransactionStatusColor(t.Status)">@DisplayEnum(t.Status)</MudChip></td><td class="numeric">@(t.Amount is null ? "—" : Currency(t.Amount.Value))</td><td>@t.Description</td></tr>
+                    }
+                </Rows>
+            </DataTable>
+        }
+    </div>;
+
+    private static string Currency(decimal value) => value.ToString("C2", Us);
+    private static string Date(DateOnly value) => value.ToString("MM/dd/yyyy", Us);
+    private static string Percent(decimal value) => value.ToString("P2", Us);
+    private static string MaskSsn(string last4) => $"***-**-{last4}";
+    private static string FormatAddress(AddressDto address) => string.Join(", ", new[] { address.Line1, address.Line2, address.City, address.State, address.PostalCode }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    private static string DisplayEnum<T>(T value) where T : struct, Enum => System.Text.RegularExpressions.Regex.Replace(value.ToString(), "(?<!^)([A-Z])", " $1");
+
+    private static Color StatusColor(PolicyStatus status) => status switch
+    {
+        PolicyStatus.InForce => Color.Success,
+        PolicyStatus.Pending => Color.Info,
+        PolicyStatus.Lapsed => Color.Warning,
+        PolicyStatus.Surrendered => Color.Error,
+        _ => Color.Default
+    };
+
+    private static Color TransactionStatusColor(TransactionStatus status) => status switch
+    {
+        TransactionStatus.Pending => Color.Warning,
+        TransactionStatus.Completed => Color.Success,
+        TransactionStatus.Rejected => Color.Error,
+        _ => Color.Default
+    };
+
+    private enum ActionKind { Address, Beneficiaries, Quote }
+
+    private sealed class AddressEditModel
+    {
+        public string Line1 { get; set; } = string.Empty;
+        public string? Line2 { get; set; }
+        public string City { get; set; } = string.Empty;
+        public string State { get; set; } = string.Empty;
+        public string PostalCode { get; set; } = string.Empty;
+        public static AddressEditModel From(AddressDto address) => new() { Line1 = address.Line1, Line2 = address.Line2, City = address.City, State = address.State, PostalCode = address.PostalCode };
+    }
+
+    private sealed class BeneficiaryEditModel
+    {
+        public Guid ClientId { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public string Relationship { get; set; } = string.Empty;
+        public BeneficiaryType Type { get; set; }
+        public decimal Percent { get; set; }
+        public static BeneficiaryEditModel From(BeneficiaryDto beneficiary) => new() { Name = beneficiary.Name, Relationship = beneficiary.Relationship, Type = beneficiary.Type, Percent = beneficiary.Percent };
+    }
+
+    private sealed class QuoteEditModel
+    {
+        public QuoteKind Kind { get; set; } = QuoteKind.Loan;
+        public decimal Amount { get; set; } = 1000m;
+    }
+}

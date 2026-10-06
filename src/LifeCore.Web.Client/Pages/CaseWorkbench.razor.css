@@ -1,0 +1,132 @@
+.workbench-shell {
+    font-family: "Graphik", "Inter", Arial, sans-serif;
+}
+
+.case-header,
+.side-rail > * {
+    border-radius: 0;
+}
+
+.case-header__main,
+.section-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.case-header__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    justify-content: flex-end;
+}
+
+.fact,
+.app-fact,
+.risk-card {
+    border-left: 4px solid var(--mud-palette-primary);
+    background: color-mix(in srgb, var(--mud-palette-primary) 6%, transparent);
+    padding: .75rem .9rem;
+    min-height: 72px;
+}
+
+.fact span,
+.app-fact span,
+.risk-card span {
+    display: block;
+    color: var(--mud-palette-text-secondary);
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.fact strong,
+.app-fact strong,
+.risk-card strong {
+    display: block;
+    margin-top: .25rem;
+    font-size: 1rem;
+}
+
+.section-title {
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+
+.section-title span {
+    color: var(--mud-palette-primary);
+    font-weight: 900;
+}
+
+.app-data-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: .75rem;
+}
+
+.app-fact.is-alert {
+    border-left-color: var(--mud-palette-warning);
+    background: color-mix(in srgb, var(--mud-palette-warning) 14%, transparent);
+}
+
+.alert-stack,
+.side-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.order-dialog {
+    border-color: var(--mud-palette-primary) !important;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.workbench-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.workbench-table th,
+.workbench-table td {
+    padding: .8rem .75rem;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.workbench-table th {
+    color: var(--mud-palette-text-secondary);
+    font-size: .76rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.workbench-table tbody tr:hover {
+    background: color-mix(in srgb, var(--mud-palette-primary) 5%, transparent);
+}
+
+.numeric {
+    text-align: right !important;
+}
+
+.risk-card--primary {
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+}
+
+.risk-card--primary span {
+    color: color-mix(in srgb, var(--mud-palette-primary-text) 76%, transparent);
+}
+
+.summary-list {
+    margin: 1rem 0 0;
+    padding-left: 1.25rem;
+}
+
+.summary-list li {
+    margin-bottom: .5rem;
+}

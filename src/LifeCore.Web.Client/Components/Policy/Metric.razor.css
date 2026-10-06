@@ -1,0 +1,5 @@
+.metric { border-left: 3px solid var(--mud-palette-primary); padding-left: .75rem; min-width: 0; }
+.metric span { display: block; color: var(--mud-palette-text-secondary); font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+.metric strong { display: block; color: var(--mud-palette-text-primary); overflow-wrap: anywhere; }
+.metric.align-right { text-align: right; border-left: 0; border-right: 3px solid var(--mud-palette-primary); padding-left: 0; padding-right: .75rem; }
+@media (max-width: 700px) { .metric.align-right { text-align: left; border-right: 0; border-left: 3px solid var(--mud-palette-primary); padding-left: .75rem; padding-right: 0; } }

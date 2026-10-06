@@ -1,0 +1,10 @@
+<MudPaper Elevation="0" Class="lc-kpi-card lc-kpi-accent" data-testid="@TestId">
+    <div class="lc-kpi-label">@Label</div>
+    <div class="lc-kpi-value" data-testid="kpi-value">@Value</div>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string TestId { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+}

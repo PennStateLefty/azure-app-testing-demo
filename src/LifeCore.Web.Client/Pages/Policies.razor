@@ -1,0 +1,230 @@
+@page "/policies"
+@using System.Globalization
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Routing
+@using MudBlazor
+@using LifeCore.Contracts
+@using LifeCore.Web.Client.Services
+@inject LifeCoreApi Api
+@inject NavigationManager Navigation
+
+<PageTitle>Policy Search | LifeCore Suite</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="policy-search-page py-6">
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="policy-page-heading">
+            <div>
+                <MudText Typo="Typo.overline" Color="Color.Primary">Policy administration</MudText>
+                <MudText Typo="Typo.h4" HtmlTag="h1">Policy 360 search</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Find in-force policies by number, owner name, or SSN last 4.</MudText>
+            </div>
+        </MudStack>
+
+        <MudPaper Class="search-panel pa-4" Elevation="0" Outlined="true">
+            <EditForm Model="this" OnSubmit="RunSearchFromFormAsync">
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="9">
+                        <MudTextField T="string"
+                                      @bind-Value="SearchText"
+                                      Label="Policy #, owner name or SSN last 4"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Immediate="true"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search"
+                                      aria-label="Policy number, owner name or SSN last 4"
+                                      data-testid="policy-search-input" />
+                    </MudItem>
+                    <MudItem xs="12" md="3">
+                        <MudButton ButtonType="ButtonType.Submit"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   FullWidth="true"
+                                   Disabled="_isLoading"
+                                   data-testid="policy-search-submit"
+                                   aria-label="Search policies">
+                            @if (_isLoading)
+                            {
+                                <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+                            }
+                            Search
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </EditForm>
+        </MudPaper>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_error</MudAlert>
+        }
+
+        <MudPaper Class="results-panel" Elevation="0" Outlined="true" data-testid="policy-results">
+            @if (_isLoading)
+            {
+                <div class="loading-region" role="status" aria-live="polite">
+                    <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+                    <MudText Typo="Typo.body2">Loading policy results…</MudText>
+                </div>
+            }
+            else if (_results is null)
+            {
+                <div class="empty-state" data-testid="policy-results-empty">
+                    <MudIcon Icon="@Icons.Material.Filled.ManageSearch" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Typo="Typo.h6">Search policies</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Try LC1000001, LC1000002, an owner name, or an SSN last 4.</MudText>
+                </div>
+            }
+            else if (_results.Items.Count == 0)
+            {
+                <div class="empty-state" data-testid="policy-results-empty">
+                    <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Secondary" Size="Size.Large" />
+                    <MudText Typo="Typo.h6">No policies found</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Adjust the query and search again.</MudText>
+                </div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="policy-table" aria-label="Policy search results">
+                        <thead>
+                            <tr>
+                                <th>Policy #</th>
+                                <th>Product</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Owner</th>
+                                <th>Insured</th>
+                                <th>SSN last 4</th>
+                                <th class="numeric">Face amount</th>
+                                <th>Issue date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var policy in _results.Items)
+                            {
+                                <tr class="clickable-row"
+                                    tabindex="0"
+                                    role="button"
+                                    aria-label="Open policy @policy.PolicyNumber"
+                                    data-testid="policy-result-row"
+                                    data-policy-number="@policy.PolicyNumber"
+                                    @onclick="() => OpenPolicy(policy.PolicyNumber)"
+                                    @onkeydown="args => OnRowKeyDown(args, policy.PolicyNumber)">
+                                    <td><strong>@policy.PolicyNumber</strong></td>
+                                    <td>@policy.ProductName</td>
+                                    <td>@DisplayEnum(policy.ProductType)</td>
+                                    <td><MudChip T="string" Size="Size.Small" Color="@StatusColor(policy.Status)" Variant="Variant.Filled">@DisplayEnum(policy.Status)</MudChip></td>
+                                    <td>@policy.OwnerName</td>
+                                    <td>@policy.InsuredName</td>
+                                    <td>@MaskSsn(policy.OwnerSsnLast4)</td>
+                                    <td class="numeric">@Currency(policy.FaceAmount)</td>
+                                    <td>@Date(policy.IssueDate)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pager-row">
+                    <MudText Typo="Typo.body2" data-testid="policy-results-page-info">
+                        Page @_results.Page of @TotalPages — @_results.TotalCount.ToString("N0", CultureInfo.GetCultureInfo("en-US")) policies
+                    </MudText>
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Disabled="_results.Page <= 1 || _isLoading" OnClick="PreviousPageAsync" aria-label="Previous policy results page">Previous</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="_results.Page >= TotalPages || _isLoading" OnClick="NextPageAsync" data-testid="policy-results-next-page" aria-label="Next policy results page">Next</MudButton>
+                    </MudStack>
+                </div>
+            }
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private static readonly CultureInfo Us = CultureInfo.GetCultureInfo("en-US");
+    private const int PageSize = 25;
+
+    [Parameter, SupplyParameterFromQuery(Name = "query")]
+    public string? Query { get; set; }
+
+    private string? SearchText { get; set; }
+    private PagedResult<PolicySearchResultDto>? _results;
+    private int _page = 1;
+    private bool _isLoading;
+    private string? _error;
+
+    private int TotalPages => _results is null ? 1 : Math.Max(1, (int)Math.Ceiling(_results.TotalCount / (double)_results.PageSize));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.Equals(SearchText, Query, StringComparison.Ordinal))
+        {
+            SearchText = Query;
+            _page = 1;
+            if (!string.IsNullOrWhiteSpace(Query))
+                await SearchAsync();
+        }
+    }
+
+    private async Task RunSearchFromFormAsync()
+    {
+        _page = 1;
+        var uri = string.IsNullOrWhiteSpace(SearchText)
+            ? "/policies"
+            : $"/policies?query={Uri.EscapeDataString(SearchText.Trim())}";
+        Navigation.NavigateTo(uri, replace: true);
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        try
+        {
+            _results = await Api.SearchPoliciesAsync(SearchText, _page, PageSize);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load policies: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_results is null || _results.Page >= TotalPages) return;
+        _page = _results.Page + 1;
+        await SearchAsync();
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_results is null || _results.Page <= 1) return;
+        _page = _results.Page - 1;
+        await SearchAsync();
+    }
+
+    private void OpenPolicy(string policyNumber) => Navigation.NavigateTo($"/policies/{Uri.EscapeDataString(policyNumber)}");
+
+    private void OnRowKeyDown(KeyboardEventArgs args, string policyNumber)
+    {
+        if (args.Key is "Enter" or " ") OpenPolicy(policyNumber);
+    }
+
+    private static string Currency(decimal value) => value.ToString("C0", Us);
+    private static string Date(DateOnly value) => value.ToString("MM/dd/yyyy", Us);
+    private static string MaskSsn(string last4) => $"***-**-{last4}";
+    private static string DisplayEnum<T>(T value) where T : struct, Enum => System.Text.RegularExpressions.Regex.Replace(value.ToString(), "(?<!^)([A-Z])", " $1");
+
+    private static Color StatusColor(PolicyStatus status) => status switch
+    {
+        PolicyStatus.InForce => Color.Success,
+        PolicyStatus.Pending => Color.Info,
+        PolicyStatus.Lapsed => Color.Warning,
+        PolicyStatus.Surrendered => Color.Error,
+        _ => Color.Default
+    };
+}

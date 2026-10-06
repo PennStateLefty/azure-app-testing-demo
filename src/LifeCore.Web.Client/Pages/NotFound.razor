@@ -1,5 +1,9 @@
-﻿@page "/not-found"
-@layout MainLayout
+@page "/not-found"
 
-<h3>Not Found</h3>
-<p>Sorry, the content you are looking for does not exist.</p>
+<PageTitle>Not found - LifeCore Suite</PageTitle>
+
+<MudPaper Class="pa-8 lc-empty-state" Elevation="0">
+    <MudText Typo="Typo.h1">Not found</MudText>
+    <MudText Typo="Typo.body1" Class="mt-2">The requested LifeCore Suite screen does not exist.</MudText>
+    <MudButton Href="/dashboard" Color="Color.Primary" Variant="Variant.Filled" Class="mt-4">Return to dashboard</MudButton>
+</MudPaper>

@@ -1,0 +1,15 @@
+@namespace LifeCore.Web.Client.Components.Policy
+
+<div class="table-wrap" data-testid="@TestId">
+    <table class="policy-detail-table" aria-label="@Label">
+        <thead>@Header</thead>
+        <tbody>@Rows</tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter] public string TestId { get; set; } = string.Empty;
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? Header { get; set; }
+    [Parameter] public RenderFragment? Rows { get; set; }
+}

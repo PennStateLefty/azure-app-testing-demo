@@ -1,0 +1,30 @@
+<MudChip T="string" Label="true" Size="Size.Small" Variant="Variant.Filled" Color="ChipColor" Class="@CombinedClass" data-testid="@TestId">
+    @Label
+</MudChip>
+
+@code {
+    [Parameter] public CaseStatus? CaseStatus { get; set; }
+    [Parameter] public PolicyStatus? PolicyStatus { get; set; }
+    [Parameter] public string? TestId { get; set; }
+
+    private string Label => CaseStatus.HasValue
+        ? DisplayFormat.EnumLabel(CaseStatus.Value)
+        : PolicyStatus.HasValue ? DisplayFormat.EnumLabel(PolicyStatus.Value) : "Unknown";
+
+    private Color ChipColor => CaseStatus switch
+    {
+        LifeCore.Contracts.CaseStatus.Decisioned => Color.Success,
+        LifeCore.Contracts.CaseStatus.PendingRequirements => Color.Warning,
+        LifeCore.Contracts.CaseStatus.Withdrawn => Color.Error,
+        _ => PolicyStatus switch
+        {
+            LifeCore.Contracts.PolicyStatus.InForce => Color.Success,
+            LifeCore.Contracts.PolicyStatus.Pending => Color.Warning,
+            LifeCore.Contracts.PolicyStatus.Lapsed or LifeCore.Contracts.PolicyStatus.Surrendered => Color.Error,
+            _ => Color.Info
+        }
+    };
+
+    private string CssClass => $"lc-status-{Label.ToLowerInvariant().Replace(" ", "-")}";
+    private string CombinedClass => $"lc-status-chip {CssClass}";
+}

@@ -1,9 +1,88 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject PersonaState PersonaState
 
-@Body
+<MudThemeProvider Theme="LifeCoreTheme.Theme" IsDarkMode="false" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout Class="lc-app-shell">
+    <MudAppBar Elevation="0" Dense="false" Class="lc-appbar">
+        <MudLink Href="/dashboard" Underline="Underline.None" Class="lc-brand" aria-label="LifeCore Suite dashboard">
+            <span class="lc-brand-mark" aria-hidden="true">&gt;</span>
+            <span class="lc-brand-text">LifeCore Suite</span>
+            <span class="lc-tenant">Contoso Life &amp; Annuity</span>
+        </MudLink>
+        <MudSpacer />
+        <MudTextField T="string" @bind-Value="_globalSearch" Placeholder="Search UW case or LC policy" aria-label="Global search" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" OnKeyDown="HandleGlobalSearchKeyDown" Class="lc-global-search" data-testid="global-search" />
+        <div class="lc-persona-wrap" data-testid="persona-switcher">
+            <MudSelect T="string" Value="SelectedPersonaId" ValueChanged="ChangePersona" aria-label="Select persona" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Class="lc-persona-select">
+                @foreach (var persona in PersonaState.All)
+                {
+                    <MudSelectItem T="string" Value="@persona.Id">@persona.DisplayName (@persona.Role)</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+        <MudChip T="string" Label="true" Size="Size.Small" Color="Color.Primary" Class="lc-env-badge" data-testid="env-badge">DEMO</MudChip>
+    </MudAppBar>
+
+    <MudDrawer Open="true" Variant="DrawerVariant.Persistent" Elevation="0" ClipMode="DrawerClipMode.Always" Class="lc-nav-drawer">
+        <nav aria-label="Primary navigation" class="lc-nav">
+            <MudNavMenu Dense="true" Class="lc-nav-menu">
+                <MudNavLink Href="/dashboard" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Dashboard" data-testid="nav-dashboard">Dashboard</MudNavLink>
+                <MudNavLink Href="/policies" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Policy" data-testid="nav-policies">Policies</MudNavLink>
+                <MudNavLink Disabled="true" Icon="@Icons.Material.Filled.SettingsApplications" data-testid="nav-product-config">Product Config</MudNavLink>
+            </MudNavMenu>
+        </nav>
+    </MudDrawer>
+
+    <MudMainContent Class="lc-main-content">
+        <main class="lc-main" role="main">
+            @Body
+        </main>
+        <footer class="lc-footer" data-testid="footer-disclaimer">
+            Demo application – not affiliated with or endorsed by Accenture. Synthetic data only.
+        </footer>
+    </MudMainContent>
+</MudLayout>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private string? _globalSearch;
+    private string SelectedPersonaId => PersonaState.Current.Id;
+
+    protected override void OnInitialized() => PersonaState.Changed += OnPersonaChanged;
+
+    private void OnPersonaChanged() => InvokeAsync(StateHasChanged);
+
+    private void ChangePersona(string personaId) => PersonaState.Set(personaId);
+
+    private void HandleGlobalSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key != "Enter") return;
+        var value = (_globalSearch ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(value)) return;
+
+        if (System.Text.RegularExpressions.Regex.IsMatch(value, "^UW\\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            Navigation.NavigateTo($"/cases/{value.ToUpperInvariant()}");
+        }
+        else if (System.Text.RegularExpressions.Regex.IsMatch(value, "^LC\\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            Navigation.NavigateTo($"/policies/{value.ToUpperInvariant()}");
+        }
+        else
+        {
+            Navigation.NavigateTo($"/policies?query={Uri.EscapeDataString(value)}");
+        }
+    }
+
+    public void Dispose() => PersonaState.Changed -= OnPersonaChanged;
+}
