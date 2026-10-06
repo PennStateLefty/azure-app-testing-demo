@@ -1,0 +1,62 @@
+name: UI tests
+
+on:
+  workflow_call:
+    inputs:
+      base_url:
+        description: Base URL to test. Defaults to WEB_URL repo variable.
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Base URL to test. Defaults to WEB_URL repo variable.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ui-tests:
+    name: Playwright Workspaces UI tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Restore Playwright tests
+        run: dotnet restore tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj
+
+      - name: Build Playwright tests
+        run: dotnet build tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj --configuration Release --no-restore
+
+      - name: Run Playwright tests in Azure App Testing
+        env:
+          PLAYWRIGHT_SERVICE_URL: ${{ vars.PLAYWRIGHT_SERVICE_URL }}
+          BASE_URL: ${{ inputs.base_url || vars.WEB_URL }}
+        run: dotnet test tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj --configuration Release --no-build --logger "trx;LogFileName=playwright-tests.trx" --results-directory TestResults/playwright -- NUnit.NumberOfTestWorkers=20
+
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: |
+            TestResults/playwright/**
+            tests/LifeCore.PlaywrightTests/TestResults/**
+            playwright-report/**
+          if-no-files-found: warn

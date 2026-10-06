@@ -1,0 +1,21 @@
+name: lifecore
+metadata:
+  template: lifecore-suite@0.0.1
+infra:
+  provider: bicep
+  path: infra
+hooks:
+  preprovision:
+    posix:
+      shell: sh
+      run: ./hooks/preprovision.sh
+    windows:
+      shell: pwsh
+      run: ./hooks/preprovision.ps1
+  postprovision:
+    posix:
+      shell: sh
+      run: ./hooks/postprovision.sh
+    windows:
+      shell: pwsh
+      run: ./hooks/postprovision.ps1

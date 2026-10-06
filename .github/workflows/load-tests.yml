@@ -1,0 +1,81 @@
+name: Load tests
+
+on:
+  workflow_call:
+    inputs:
+      test_profile:
+        description: Load test profile to run.
+        required: false
+        type: string
+        default: smoke
+  workflow_dispatch:
+    inputs:
+      test_profile:
+        description: Load test profile to run.
+        required: true
+        type: choice
+        default: smoke
+        options:
+          - smoke
+          - uw
+          - csr
+          - peak
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  load-tests:
+    name: Azure Load Testing (${{ inputs.test_profile || 'smoke' }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve load test profile
+        id: profile
+        env:
+          TEST_PROFILE: ${{ inputs.test_profile || 'smoke' }}
+          WEB_URL: ${{ vars.WEB_URL }}
+        run: |
+          set -euo pipefail
+          case "$TEST_PROFILE" in
+            smoke) config='loadtests/smoke.yaml' ;;
+            uw) config='loadtests/underwriter-journey.yaml' ;;
+            csr) config='loadtests/csr-policy-servicing.yaml' ;;
+            peak) config='loadtests/mixed-peak.yaml' ;;
+            *) echo "Unknown test_profile: $TEST_PROFILE" >&2; exit 1 ;;
+          esac
+          host="${WEB_URL#https://}"
+          host="${host#http://}"
+          host="${host%%/*}"
+          echo "config=$config" >> "$GITHUB_OUTPUT"
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+
+      - name: Run Azure Load Testing
+        uses: azure/load-testing@v1
+        with:
+          loadtestConfigFile: ${{ steps.profile.outputs.config }}
+          loadtestResource: ${{ vars.LOAD_TEST_RESOURCE_NAME }}
+          resourceGroup: ${{ vars.AZURE_RESOURCE_GROUP }}
+          env: |
+            [
+              {"name":"host","value":"${{ steps.profile.outputs.host }}"},
+              {"name":"protocol","value":"https"}
+            ]
+
+      - name: Upload load test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results-${{ inputs.test_profile || 'smoke' }}
+          path: ${{ github.workspace }}/loadTest
+          if-no-files-found: warn

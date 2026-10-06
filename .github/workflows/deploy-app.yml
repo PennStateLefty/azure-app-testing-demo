@@ -1,0 +1,117 @@
+name: Deploy app
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - src/**
+      - global.json
+      - Directory.*.props
+      - .github/workflows/deploy-app.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Build, test, and deploy web app
+    if: ${{ vars.DEPLOYMENT_MODE != 'appServiceBuild' }}
+    runs-on: ubuntu-latest
+    environment: demo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore LifeCore.sln
+
+      - name: Build
+        run: dotnet build LifeCore.sln --configuration Release --no-restore
+
+      - name: Unit tests
+        run: dotnet test tests/LifeCore.UnitTests/LifeCore.UnitTests.csproj --configuration Release --no-build --logger "trx;LogFileName=unit-tests.trx" --results-directory TestResults/unit
+
+      - name: Publish web app
+        run: dotnet publish src/LifeCore.Web/LifeCore.Web.csproj --configuration Release --output ./publish --no-build
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        id: webapps_deploy
+        continue-on-error: true
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.WEB_APP_NAME }}
+          package: ./publish
+
+      - name: Explain App Service zip-deploy policy fallback
+        if: ${{ steps.webapps_deploy.outcome == 'failure' }}
+        run: |
+          cat <<'MSG'
+          App Service deployment failed. azure/webapps-deploy uses OneDeploy/ZipDeploy under the hood.
+          If the failure was a policy or 403 denial for ZIP DEPLOY, switch to the App Service Build Service fallback:
+            1. azd env set DEPLOYMENT_MODE appServiceBuild
+            2. azd provision
+            3. gh variable set DEPLOYMENT_MODE --body appServiceBuild
+            4. Register an App Service GitHub token if needed.
+          See docs/deployment.md for the full fallback procedure.
+          MSG
+          exit 1
+
+      - name: Wait for ready health check
+        env:
+          WEB_URL: ${{ vars.WEB_URL }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            code=$(curl -ksS -o /dev/null -w '%{http_code}' "${WEB_URL%/}/health/ready" || true)
+            if [ "$code" = "200" ]; then
+              echo "${WEB_URL%/}/health/ready returned 200"
+              exit 0
+            fi
+            echo "Attempt $attempt/60: health returned $code; waiting 10 seconds"
+            sleep 10
+          done
+          echo "Timed out waiting for ${WEB_URL%/}/health/ready" >&2
+          exit 1
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-unit-test-results
+          path: TestResults/unit/**/*.trx
+          if-no-files-found: warn
+
+  smoke-load-tests:
+    name: Smoke load test
+    needs: deploy
+    uses: ./.github/workflows/load-tests.yml
+    with:
+      test_profile: smoke
+    permissions:
+      contents: read
+      id-token: write
+
+  ui-tests:
+    name: Cloud browser UI tests
+    needs: deploy
+    uses: ./.github/workflows/ui-tests.yml
+    with:
+      base_url: ${{ vars.WEB_URL }}
+    permissions:
+      contents: read
+      id-token: write
