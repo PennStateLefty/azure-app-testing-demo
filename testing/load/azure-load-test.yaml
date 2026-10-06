@@ -1,0 +1,12 @@
+version: v0.1
+testId: storefront-demo
+displayName: Storefront API load test
+description: Validate catalog latency and errors after deployment
+testPlan: storefront.jmx
+engineInstances: 1
+failureCriteria:
+  - avg(response_time_ms) > 1000
+  - percentage(error) > 1
+autoStop:
+  errorPercentage: 50
+  timeWindow: 10

@@ -1,0 +1,11 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #172b4d;
+  background: #f4f7fb;
+}
+main { max-width: 900px; margin: 3rem auto; padding: 1rem; }
+.products { display: flex; flex-wrap: wrap; gap: 1rem; }
+article, section { background: white; padding: 1.5rem; border-radius: .5rem; }
+section { margin-top: 2rem; }
+button { background: #005a9e; color: white; border: 0; border-radius: .25rem; padding: .75rem; cursor: pointer; }
+button:focus-visible { outline: 3px solid #172b4d; outline-offset: 3px; }

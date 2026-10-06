@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Azure App Testing Demo</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1>Azure App Testing Demo</h1>
+      <p>A small storefront for demonstrating deployment, browser testing, and load testing.</p>
+      <h2>Products</h2>
+      <p id="status" role="status">Loading products…</p>
+      <div id="products" class="products"></div>
+      <section aria-labelledby="cart-heading">
+        <h2 id="cart-heading">Demo cart</h2>
+        <p id="cart" aria-live="polite">0 items — $0.00</p>
+        <button id="clear" type="button">Clear cart</button>
+        <p>This demo does not process payments or store customer information.</p>
+      </section>
+    </main>
+  </body>
+</html>

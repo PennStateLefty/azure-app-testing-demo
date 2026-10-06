@@ -1,0 +1,28 @@
+{
+  "name": "azure-app-testing-demo",
+  "version": "1.0.0",
+  "description": "An end-to-end demo of Azure App Testing in the flow of CI/CD driven by GitHub Actions",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/backend/server.js",
+    "test": "node --test testing/unit/*.test.js",
+    "test:e2e": "playwright test --config=testing/playwright/playwright.config.js",
+    "test:e2e:azure": "playwright test --config=testing/playwright/playwright.service.config.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PennStateLefty/azure-app-testing-demo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@azure/identity": "4.13.3",
+    "@azure/playwright": "1.1.6",
+    "@playwright/test": "1.63.0"
+  }
+}
