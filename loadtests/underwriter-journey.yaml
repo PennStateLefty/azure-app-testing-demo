@@ -24,14 +24,14 @@ env:
     value: '1'
 failureCriteria:
   clientMetrics:
-    - avg(responseTimeMs) > 700
+    - avg(response_time_ms) > 700
     - percentage(error) > 1
-    - 'GET dashboard KPIs: p95(responseTimeMs) > 500'
-    - 'GET worklist: p95(responseTimeMs) > 500'
-    - 'GET case detail: p95(responseTimeMs) > 500'
-    - 'GET risk assessment: p95(responseTimeMs) > 500'
-    - 'POST decision: p95(responseTimeMs) > 800'
-    - 'POST order requirement: p95(responseTimeMs) > 800'
+    - GET dashboard KPIs: p95(response_time_ms) > 500
+    - GET worklist: p95(response_time_ms) > 500
+    - GET case detail: p95(response_time_ms) > 500
+    - GET risk assessment: p95(response_time_ms) > 500
+    - POST decision: p95(response_time_ms) > 800
+    - POST order requirement: p95(response_time_ms) > 800
 autoStop:
   errorPercentage: 80
   timeWindow: 60

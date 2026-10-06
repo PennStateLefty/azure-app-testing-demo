@@ -26,11 +26,11 @@ env:
     value: '1'
 failureCriteria:
   clientMetrics:
-    - avg(responseTimeMs) > 1500
+    - avg(response_time_ms) > 1500
     - percentage(error) > 5
-    - 'GET health ready: avg(responseTimeMs) > 500'
-    - 'GET worklist: p90(responseTimeMs) > 1500'
-    - 'GET policies search: p90(responseTimeMs) > 1500'
+    - GET health ready: avg(response_time_ms) > 500
+    - GET worklist: p90(response_time_ms) > 1500
+    - GET policies search: p90(response_time_ms) > 1500
 autoStop:
   errorPercentage: 80
   timeWindow: 60

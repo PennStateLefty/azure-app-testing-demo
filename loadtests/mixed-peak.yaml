@@ -26,17 +26,17 @@ env:
     value: '1'
 failureCriteria:
   clientMetrics:
-    - avg(responseTimeMs) > 700
+    - avg(response_time_ms) > 700
     - percentage(error) > 1
-    - 'GET worklist: p95(responseTimeMs) > 500'
-    - 'GET policies search by policy prefix: p95(responseTimeMs) > 500'
-    - 'GET policies search by owner last name: p95(responseTimeMs) > 500'
-    - 'GET policy detail: p95(responseTimeMs) > 500'
-    - 'POST decision: p95(responseTimeMs) > 800'
-    - 'POST order requirement: p95(responseTimeMs) > 800'
-    - 'PUT address change: p95(responseTimeMs) > 800'
-    - 'POST loan quote: p95(responseTimeMs) > 800'
-    - 'PUT beneficiaries: p95(responseTimeMs) > 800'
+    - GET worklist: p95(response_time_ms) > 500
+    - GET policies search by policy prefix: p95(response_time_ms) > 500
+    - GET policies search by owner last name: p95(response_time_ms) > 500
+    - GET policy detail: p95(response_time_ms) > 500
+    - POST decision: p95(response_time_ms) > 800
+    - POST order requirement: p95(response_time_ms) > 800
+    - PUT address change: p95(response_time_ms) > 800
+    - POST loan quote: p95(response_time_ms) > 800
+    - PUT beneficiaries: p95(response_time_ms) > 800
 autoStop:
   errorPercentage: 80
   timeWindow: 60
