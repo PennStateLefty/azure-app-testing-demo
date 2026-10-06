@@ -1,0 +1,42 @@
+version: v0.1
+testId: lifecore-mixed-peak
+displayName: LifeCore mixed peak
+description: Two JMeter thread groups split total VUs 60/40. With two engines and threads=100, target load is approximately 200 concurrent users.
+testPlan: jmeter/mixed-peak.jmx
+testType: JMX
+engineInstances: 2
+configurationFiles:
+  - jmeter/data/cases.csv
+  - jmeter/data/policies.csv
+  - jmeter/data/owner-lastnames.csv
+env:
+  - name: host
+    value: your-app.azurewebsites.net
+  - name: protocol
+    value: https
+  - name: port
+    value: '443'
+  - name: threads
+    value: '100'
+  - name: rampup
+    value: '180'
+  - name: duration
+    value: '600'
+  - name: thinkScale
+    value: '1'
+failureCriteria:
+  clientMetrics:
+    - avg(responseTimeMs) > 700
+    - percentage(error) > 1
+    - 'GET worklist: p95(responseTimeMs) > 500'
+    - 'GET policies search by policy prefix: p95(responseTimeMs) > 500'
+    - 'GET policies search by owner last name: p95(responseTimeMs) > 500'
+    - 'GET policy detail: p95(responseTimeMs) > 500'
+    - 'POST decision: p95(responseTimeMs) > 800'
+    - 'POST order requirement: p95(responseTimeMs) > 800'
+    - 'PUT address change: p95(responseTimeMs) > 800'
+    - 'POST loan quote: p95(responseTimeMs) > 800'
+    - 'PUT beneficiaries: p95(responseTimeMs) > 800'
+autoStop:
+  errorPercentage: 80
+  timeWindow: 60

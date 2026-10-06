@@ -1,0 +1,39 @@
+version: v0.1
+testId: lifecore-csr-policy-servicing
+displayName: LifeCore CSR policy servicing
+description: Searches by policy prefix and owner last name, reads policy 360 tabs, with 5% address changes, 5% loan quotes, and 2% beneficiary updates.
+testPlan: jmeter/csr-policy-servicing.jmx
+testType: JMX
+engineInstances: 1
+configurationFiles:
+  - jmeter/data/policies.csv
+  - jmeter/data/owner-lastnames.csv
+env:
+  - name: host
+    value: your-app.azurewebsites.net
+  - name: protocol
+    value: https
+  - name: port
+    value: '443'
+  - name: threads
+    value: '50'
+  - name: rampup
+    value: '120'
+  - name: duration
+    value: '300'
+  - name: thinkScale
+    value: '1'
+failureCriteria:
+  clientMetrics:
+    - avg(responseTimeMs) > 700
+    - percentage(error) > 1
+    - 'GET policies search by policy prefix: p95(responseTimeMs) > 500'
+    - 'GET policies search by owner last name: p95(responseTimeMs) > 500'
+    - 'GET policy detail: p95(responseTimeMs) > 500'
+    - 'GET policy transactions: p95(responseTimeMs) > 500'
+    - 'PUT address change: p95(responseTimeMs) > 800'
+    - 'POST loan quote: p95(responseTimeMs) > 800'
+    - 'PUT beneficiaries: p95(responseTimeMs) > 800'
+autoStop:
+  errorPercentage: 80
+  timeWindow: 60

@@ -1,0 +1,37 @@
+version: v0.1
+testId: lifecore-underwriter-journey
+displayName: LifeCore underwriter journey
+description: KPIs, task worklist pages 1-5, case detail, requirements, risk assessment, summary, notes, with 10% decisions and 5% requirement orders.
+testPlan: jmeter/underwriter-journey.jmx
+testType: JMX
+engineInstances: 1
+configurationFiles:
+  - jmeter/data/cases.csv
+env:
+  - name: host
+    value: your-app.azurewebsites.net
+  - name: protocol
+    value: https
+  - name: port
+    value: '443'
+  - name: threads
+    value: '50'
+  - name: rampup
+    value: '120'
+  - name: duration
+    value: '300'
+  - name: thinkScale
+    value: '1'
+failureCriteria:
+  clientMetrics:
+    - avg(responseTimeMs) > 700
+    - percentage(error) > 1
+    - 'GET dashboard KPIs: p95(responseTimeMs) > 500'
+    - 'GET worklist: p95(responseTimeMs) > 500'
+    - 'GET case detail: p95(responseTimeMs) > 500'
+    - 'GET risk assessment: p95(responseTimeMs) > 500'
+    - 'POST decision: p95(responseTimeMs) > 800'
+    - 'POST order requirement: p95(responseTimeMs) > 800'
+autoStop:
+  errorPercentage: 80
+  timeWindow: 60

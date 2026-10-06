@@ -1,0 +1,36 @@
+version: v0.1
+testId: lifecore-smoke
+displayName: LifeCore smoke
+description: Runs one JMeter user through /health/ready, hot reads, case workbench reads/writes, and policy servicing reads/writes.
+testPlan: jmeter/smoke.jmx
+testType: JMX
+engineInstances: 1
+configurationFiles:
+  - jmeter/data/cases.csv
+  - jmeter/data/policies.csv
+  - jmeter/data/owner-lastnames.csv
+env:
+  - name: host
+    value: your-app.azurewebsites.net
+  - name: protocol
+    value: https
+  - name: port
+    value: '443'
+  - name: threads
+    value: '1'
+  - name: rampup
+    value: '1'
+  - name: duration
+    value: '60'
+  - name: thinkScale
+    value: '1'
+failureCriteria:
+  clientMetrics:
+    - avg(responseTimeMs) > 1500
+    - percentage(error) > 5
+    - 'GET health ready: avg(responseTimeMs) > 500'
+    - 'GET worklist: p90(responseTimeMs) > 1500'
+    - 'GET policies search: p90(responseTimeMs) > 1500'
+autoStop:
+  errorPercentage: 80
+  timeWindow: 60
