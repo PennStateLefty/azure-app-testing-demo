@@ -8,7 +8,7 @@ Provisioned resources:
 
 - Log Analytics workspace and workspace-based Application Insights.
 - App user-assigned managed identity (`id-app-*`) for Azure SQL access.
-- GitHub Actions user-assigned managed identity (`id-github-*`) with OIDC federated credentials for `main`, the `demo` GitHub environment, and pull requests.
+- GitHub Actions user-assigned managed identity (`id-github-*`) with OIDC federated credentials for `main`, the `demo` GitHub environment, and pull requests. Subjects use the repo's immutable-ID claim format (`repo:PennStateLefty@37122175/azure-app-testing-demo@1407755409:...`), set by the `githubOidcRepoClaim` parameter.
 - Linux App Service plan P1v3, default capacity 2, with autoscale rules (CPU > 70% scale out, CPU < 30% scale in, min 2/max 5).
 - Linux Web App with HTTPS only, Always On, `/health/ready`, disabled FTP publishing, .NET 10 runtime, startup command `dotnet LifeCore.Web.dll` (the publish output has two `.runtimeconfig.json` files), Application Insights, and SQL managed identity connection string.
 - Virtual network with an App Service-delegated subnet (`snet-app`) and a private-endpoint subnet (`snet-pe`). The web app uses regional VNet integration with all outbound traffic routed through the VNet.

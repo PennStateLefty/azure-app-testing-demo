@@ -48,6 +48,9 @@ param branch string = 'main'
 @description('GitHub Environment name for protected deploys and OIDC federation.')
 param githubEnvironment string = 'demo'
 
+@description('Repository part of the GitHub OIDC subject claim. This repo uses the immutable-ID format owner@ownerId/repo@repoId.')
+param githubOidcRepoClaim string = 'PennStateLefty@37122175/azure-app-testing-demo@1407755409'
+
 @description('When true, creates an App Service Deployment Center sourcecontrol link for GitHub Actions portal visibility. Requires App Service to have a registered GitHub token.')
 param linkDeploymentCenter bool = false
 
@@ -112,6 +115,7 @@ module resources 'modules/lifecore.bicep' = {
     repoUrl: repoUrl
     branch: branch
     githubEnvironment: githubEnvironment
+    githubOidcRepoClaim: githubOidcRepoClaim
     linkDeploymentCenter: linkDeploymentCenter
     appServicePlanSku: appServicePlanSku
     appServicePlanCapacity: appServicePlanCapacity

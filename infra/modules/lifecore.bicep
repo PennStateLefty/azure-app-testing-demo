@@ -16,6 +16,7 @@ param deploymentMode string
 param repoUrl string
 param branch string
 param githubEnvironment string
+param githubOidcRepoClaim string
 param linkDeploymentCenter bool
 param appServicePlanSku string
 param appServicePlanCapacity int
@@ -27,7 +28,7 @@ param sqlDatabaseAutoPauseDelay int
 
 var resourceToken = toLower(uniqueString(subscription().id, resourceGroup().id, environmentName, location))
 var nameSuffix = '${environmentName}-${resourceToken}'
-var repoOwnerName = 'PennStateLefty/azure-app-testing-demo'
+var repoOwnerName = githubOidcRepoClaim
 var mainSubject = 'repo:${repoOwnerName}:ref:refs/heads/${branch}'
 var environmentSubject = 'repo:${repoOwnerName}:environment:${githubEnvironment}'
 var pullRequestSubject = 'repo:${repoOwnerName}:pull_request'
