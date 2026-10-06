@@ -15,7 +15,7 @@ export default defineConfig(
   }),
   {
     reporter: [
-      ['html', { outputFolder: '../../playwright-report', open: 'never' }],
+      ['html', { open: 'never' }],
       ['@azure/playwright/reporter'],
       ['list'],
     ],
