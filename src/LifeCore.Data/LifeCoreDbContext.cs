@@ -56,5 +56,15 @@ public sealed class LifeCoreDbContext(DbContextOptions<LifeCoreDbContext> option
         b.Entity<Policy>().HasMany(p => p.Transactions).WithOne(c => c.Policy).HasForeignKey(c => c.PolicyNumber).HasPrincipalKey(p => p.PolicyNumber).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Party>().HasIndex("Name");
         b.Entity<Party>().HasIndex("SsnLast4");
+
+        // SQL Server rejects multiple cascade paths; only aggregate roots (Policy, Case) cascade to their children.
+        foreach (var fk in b.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()))
+        {
+            var principal = fk.PrincipalEntityType.ClrType;
+            if (!fk.IsOwnership && principal != typeof(Policy) && principal != typeof(UnderwritingCase))
+            {
+                fk.DeleteBehavior = DeleteBehavior.Restrict;
+            }
+        }
     }
 }

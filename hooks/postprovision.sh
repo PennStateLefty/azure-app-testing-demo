@@ -45,6 +45,11 @@ else
   echo "To set these with GitHub CLI automatically, rerun with SET_GH_VARS=true after 'gh auth login'."
 fi
 
+if [ "${SQL_ADMIN_IS_APP_IDENTITY:-true}" = "true" ]; then
+  echo "App managed identity is the SQL Entra admin (SQL is private-endpoint only); no contained user needed."
+  exit 0
+fi
+
 if ! command -v sqlcmd >/dev/null 2>&1; then
   echo "sqlcmd is required to create the Azure SQL contained user for the app managed identity." >&2
   echo "Install go-sqlcmd: brew install sqlcmd (macOS) or winget install sqlcmd (Windows), then rerun: azd hooks run postprovision" >&2

@@ -72,10 +72,12 @@ dotnet test tests/LifeCore.PlaywrightTests           # E2E against BASE_URL (def
 ```bash
 azd auth login
 azd env new lifecore-demo
-azd provision            # Bicep: App Service, Azure SQL, App Insights, Load Testing, Playwright Workspace, identities
+azd provision            # Bicep: App Service (VNet-integrated), private Azure SQL, App Insights, Load Testing, Playwright Workspace, identities
 ```
 
 Then set the GitHub repository variables printed by the postprovision hook and push to `main`. Deployment is **App Service continuous deployment via GitHub Actions** (`DEPLOYMENT_MODE=githubActions`); if your subscription blocks ZIP deploy, switch to the **App Service Build Service** fallback (`DEPLOYMENT_MODE=appServiceBuild`). Full details: [docs/deployment.md](docs/deployment.md).
+
+Defaults: app in **West US 3** and the Playwright Workspace in **East US**. Azure SQL is private-endpoint only, and the app managed identity is its Entra admin.
 
 ## Performance demo (before/after)
 

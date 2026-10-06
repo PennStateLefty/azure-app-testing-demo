@@ -1,10 +1,10 @@
 param environmentName string
 param location string
-param playwrightLocation string
 param tags object
 param sqlAdminObjectId string
 param sqlAdminLogin string
 param sqlAdminPrincipalType string
+param sqlAdminIsAppIdentity bool
 param tenantId string
 
 @allowed([
@@ -42,9 +42,7 @@ var planName = 'plan-lifecore-${nameSuffix}'
 var webAppName = 'app-lifecore-${resourceToken}'
 var sqlServerName = 'sql-lifecore-${resourceToken}'
 var loadTestName = 'lt-lifecore-${resourceToken}'
-var playwrightName = 'pw-${resourceToken}'
 
-var contributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab3b-0e9a2e1b6b8b')
 var readerRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')
 var websiteContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'de139f84-1756-47ae-9be6-808fbbe84772')
 var loadTestContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '749a398d-560b-491b-bb21-08924219302e')
@@ -100,6 +98,9 @@ resource githubMainFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/
 resource githubEnvironmentFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
   parent: githubIdentity
   name: 'github-environment-${githubEnvironment}'
+  dependsOn: [
+    githubMainFederation
+  ]
   properties: {
     issuer: oidcIssuer
     subject: environmentSubject
@@ -112,11 +113,49 @@ resource githubEnvironmentFederation 'Microsoft.ManagedIdentity/userAssignedIden
 resource githubPullRequestFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
   parent: githubIdentity
   name: 'github-pull-request'
+  dependsOn: [
+    githubEnvironmentFederation
+  ]
   properties: {
     issuer: oidcIssuer
     subject: pullRequestSubject
     audiences: [
       oidcAudience
+    ]
+  }
+}
+
+resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+  name: 'vnet-lifecore-${nameSuffix}'
+  location: location
+  tags: tags
+  properties: {
+    addressSpace: {
+      addressPrefixes: [
+        '10.20.0.0/16'
+      ]
+    }
+    subnets: [
+      {
+        name: 'snet-app'
+        properties: {
+          addressPrefix: '10.20.1.0/24'
+          delegations: [
+            {
+              name: 'appservice'
+              properties: {
+                serviceName: 'Microsoft.Web/serverFarms'
+              }
+            }
+          ]
+        }
+      }
+      {
+        name: 'snet-private-endpoints'
+        properties: {
+          addressPrefix: '10.20.2.0/24'
+        }
+      }
     ]
   }
 }
@@ -151,9 +190,12 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
+    virtualNetworkSubnetId: vnet.properties.subnets[0].id
+    vnetRouteAllEnabled: true
     clientAffinityEnabled: false
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|10.0'
+      appCommandLine: 'dotnet LifeCore.Web.dll'
       alwaysOn: true
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
@@ -325,22 +367,69 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
     administrators: {
       administratorType: 'ActiveDirectory'
       azureADOnlyAuthentication: true
-      login: sqlAdminLogin
-      sid: sqlAdminObjectId
-      principalType: sqlAdminPrincipalType
+      login: sqlAdminIsAppIdentity ? appIdentity.name : sqlAdminLogin
+      sid: sqlAdminIsAppIdentity ? appIdentity.properties.principalId : sqlAdminObjectId
+      principalType: sqlAdminIsAppIdentity ? 'Application' : sqlAdminPrincipalType
       tenantId: tenantId
     }
     minimalTlsVersion: '1.2'
-    publicNetworkAccess: 'Enabled'
+    // Reached only through the private endpoint; many subscriptions enforce this by policy.
+    publicNetworkAccess: 'Disabled'
   }
 }
 
-resource allowAzureSqlFirewall 'Microsoft.Sql/servers/firewallRules@2023-08-01-preview' = {
-  parent: sqlServer
-  name: 'AllowAllWindowsAzureIps'
+resource sqlPrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
+  name: 'privatelink${environment().suffixes.sqlServerHostname}'
+  location: 'global'
+  tags: tags
+}
+
+resource sqlPrivateDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
+  parent: sqlPrivateDnsZone
+  name: 'link-${vnet.name}'
+  location: 'global'
   properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0'
+    registrationEnabled: false
+    virtualNetwork: {
+      id: vnet.id
+    }
+  }
+}
+
+resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
+  name: 'pe-${sqlServerName}'
+  location: location
+  tags: tags
+  properties: {
+    subnet: {
+      id: vnet.properties.subnets[1].id
+    }
+    privateLinkServiceConnections: [
+      {
+        name: 'sql'
+        properties: {
+          privateLinkServiceId: sqlServer.id
+          groupIds: [
+            'sqlServer'
+          ]
+        }
+      }
+    ]
+  }
+}
+
+resource sqlPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = {
+  parent: sqlPrivateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'sql'
+        properties: {
+          privateDnsZoneId: sqlPrivateDnsZone.id
+        }
+      }
+    ]
   }
 }
 
@@ -373,18 +462,6 @@ resource loadTest 'Microsoft.LoadTestService/loadTests@2022-12-01' = {
   }
 }
 
-resource playwrightWorkspace 'Microsoft.LoadTestService/playwrightWorkspaces@2025-09-01' = {
-  name: playwrightName
-  location: playwrightLocation
-  tags: tags
-  properties: {
-    localAuth: 'Disabled'
-    regionalAffinity: 'Enabled'
-    #disable-next-line BCP037
-    reporting: 'Enabled'
-  }
-}
-
 resource githubWebContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(webApp.id, githubIdentity.id, websiteContributorRoleId)
   scope: webApp
@@ -400,16 +477,6 @@ resource githubLoadTestContributor 'Microsoft.Authorization/roleAssignments@2022
   scope: loadTest
   properties: {
     roleDefinitionId: loadTestContributorRoleId
-    principalId: githubIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource githubPlaywrightContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(playwrightWorkspace.id, githubIdentity.id, contributorRoleId)
-  scope: playwrightWorkspace
-  properties: {
-    roleDefinitionId: contributorRoleId
     principalId: githubIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -434,11 +501,10 @@ output APP_IDENTITY_CLIENT_ID string = appIdentity.properties.clientId
 output GITHUB_IDENTITY_CLIENT_ID string = githubIdentity.properties.clientId
 output GITHUB_IDENTITY_PRINCIPAL_ID string = githubIdentity.properties.principalId
 output LOAD_TEST_RESOURCE_NAME string = loadTest.name
-output PLAYWRIGHT_WORKSPACE_NAME string = playwrightWorkspace.name
-output PLAYWRIGHT_SERVICE_URL string = playwrightWorkspace.properties.dataplaneUri
 #disable-next-line outputs-should-not-contain-secrets
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = appInsights.properties.ConnectionString
 output APP_SERVICE_PLAN_ID string = plan.id
 output WEB_APP_ID string = webApp.id
 output SQL_DATABASE_ID string = sqlDb.id
 output APP_INSIGHTS_ID string = appInsights.id
+output SQL_ADMIN_IS_APP_IDENTITY bool = sqlAdminIsAppIdentity

@@ -10,12 +10,16 @@ Provisioned resources:
 - App user-assigned managed identity (`id-app-*`) for Azure SQL access.
 - GitHub Actions user-assigned managed identity (`id-github-*`) with OIDC federated credentials for `main`, the `demo` GitHub environment, and pull requests.
 - Linux App Service plan P1v3, default capacity 2, with autoscale rules (CPU > 70% scale out, CPU < 30% scale in, min 2/max 5).
-- Linux Web App with HTTPS only, Always On, `/health/ready`, disabled FTP publishing, .NET 10 runtime, Application Insights, and SQL managed identity connection string.
-- Azure SQL server with Entra-only authentication and a serverless General Purpose database named `lifecore`.
+- Linux Web App with HTTPS only, Always On, `/health/ready`, disabled FTP publishing, .NET 10 runtime, startup command `dotnet LifeCore.Web.dll` (the publish output has two `.runtimeconfig.json` files), Application Insights, and SQL managed identity connection string.
+- Virtual network with an App Service-delegated subnet (`snet-app`) and a private-endpoint subnet (`snet-pe`). The web app uses regional VNet integration with all outbound traffic routed through the VNet.
+- Azure SQL server with Entra-only authentication, **public network access disabled**, a private endpoint, and the `privatelink.database.windows.net` private DNS zone linked to the VNet. Database: serverless General Purpose `lifecore`.
+- By default (`sqlAdminIsAppIdentity=true`) the app managed identity is the SQL Entra admin, so the app can create and seed the schema without a contained user being created from outside the VNet.
 - Azure Load Testing resource for JMeter test definitions.
-- Playwright Workspace with Entra-only local auth disabled, reporting enabled, and regional affinity enabled.
+- Playwright Workspace (local auth disabled, regional affinity enabled) in a separate resource group `rg-lifecore-<env>-pw`. Output `PLAYWRIGHT_SERVICE_URL` is the `wss://…/browsers` endpoint the Playwright SDK expects.
 
-Default region is `eastus`; Playwright Workspaces currently list support for East US, West US 3, West Europe, East Asia, Japan East, Australia East, and Switzerland North. Use `playwrightLocation` if your main app region differs.
+Default region is `westus3` (East US had no App Service quota in the demo subscription). The Playwright Workspace defaults to `playwrightLocation=eastus` in its own resource group because the workspace API has no West US 3 endpoint, even though the region is listed.
+
+Why private networking: tenant policy forces Azure SQL `publicNetworkAccess=Disabled` and denies firewall rules, so the app reaches SQL only through VNet integration and the private endpoint, using managed identity end to end.
 
 ## Deployment modes
 
@@ -69,7 +73,7 @@ Parameter `linkDeploymentCenter` defaults to `false`. Setting it to `true` in Gi
 
    ```bash
    azd env new <env-name>
-   azd env set AZURE_LOCATION eastus
+   azd env set AZURE_LOCATION westus3
    azd env set DEPLOYMENT_MODE githubActions
    ```
 
@@ -83,7 +87,15 @@ Parameter `linkDeploymentCenter` defaults to `false`. Setting it to `true` in Gi
 
    First provision generally needs Owner or User Access Administrator at subscription/resource-group scope because Bicep creates role assignments for the GitHub identity.
 
-5. Let the postprovision hook create the SQL contained user for the app managed identity. It temporarily adds your client IP to the SQL firewall and runs:
+   If azd prompts you to sign in to other tenants, deploy with the az CLI pinned to your subscription instead (run from `infra/`):
+
+   ```bash
+   az deployment sub create --subscription <sub-id> --location westus3 --name lifecore-<env> \
+     --template-file main.bicep \
+     --parameters environmentName=<env> sqlAdminObjectId=<your-object-id> sqlAdminLogin=<your-upn> tenantId=<tenant-id>
+   ```
+
+5. SQL user setup. With the default `sqlAdminIsAppIdentity=true` (private SQL), the postprovision hook skips this step: the app identity is already the SQL admin. Only when `sqlAdminIsAppIdentity=false` and SQL is reachable from your machine does the hook create the contained user. It temporarily adds your client IP to the SQL firewall and runs:
 
    ```sql
    CREATE USER [<APP_IDENTITY_NAME>] FROM EXTERNAL PROVIDER;

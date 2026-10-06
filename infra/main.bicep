@@ -4,16 +4,19 @@ targetScope = 'subscription'
 param environmentName string
 
 @description('Primary Azure region for the resource group and most resources.')
-param location string = 'eastus'
+param location string = 'westus3'
 
-@description('Optional separate region for Playwright Workspaces. Must be a supported Playwright Workspaces region.')
-param playwrightLocation string = location
+@description('Region for the Playwright Workspace. Must have a Playwright Workspaces endpoint (westus3 is listed but has none). A different region from location gets its own resource group.')
+param playwrightLocation string = 'eastus'
 
 @description('Object ID for the principal that becomes the Entra-only Azure SQL administrator.')
 param sqlAdminObjectId string
 
 @description('Display/login name for the Entra-only Azure SQL administrator.')
 param sqlAdminLogin string
+
+@description('When true (default), the app managed identity is the SQL Entra admin. Needed when SQL public access is disabled, because no contained user can be created from outside the VNet.')
+param sqlAdminIsAppIdentity bool = true
 
 @allowed([
   'User'
@@ -79,17 +82,28 @@ resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   tags: tags
 }
 
+// Playwright Workspaces preflight validation is routed by resource group region, so a workspace
+// outside the primary region gets its own resource group in that region.
+var separatePlaywrightGroup = toLower(replace(playwrightLocation, ' ', '')) != toLower(replace(location, ' ', ''))
+var playwrightResourceGroupName = separatePlaywrightGroup ? '${resourceGroupName}-pw' : resourceGroupName
+
+resource playwrightRg 'Microsoft.Resources/resourceGroups@2024-03-01' = if (separatePlaywrightGroup) {
+  name: playwrightResourceGroupName
+  location: playwrightLocation
+  tags: tags
+}
+
 module resources 'modules/lifecore.bicep' = {
   name: 'lifecore-${environmentName}'
   scope: rg
   params: {
     environmentName: environmentName
     location: location
-    playwrightLocation: playwrightLocation
     tags: tags
     sqlAdminObjectId: sqlAdminObjectId
     sqlAdminLogin: sqlAdminLogin
     sqlAdminPrincipalType: sqlAdminPrincipalType
+    sqlAdminIsAppIdentity: sqlAdminIsAppIdentity
     tenantId: tenantId
     deploymentMode: deploymentMode
     repoUrl: repoUrl
@@ -106,6 +120,20 @@ module resources 'modules/lifecore.bicep' = {
   }
 }
 
+module playwright 'modules/playwright.bicep' = {
+  name: 'lifecore-playwright-${environmentName}'
+  scope: resourceGroup(playwrightResourceGroupName)
+  dependsOn: [
+    playwrightRg
+  ]
+  params: {
+    name: 'pw-${toLower(uniqueString(subscription().id, resourceGroupName, environmentName))}'
+    location: playwrightLocation
+    tags: tags
+    githubIdentityPrincipalId: resources.outputs.GITHUB_IDENTITY_PRINCIPAL_ID
+  }
+}
+
 output AZURE_RESOURCE_GROUP string = rg.name
 output WEB_APP_NAME string = resources.outputs.WEB_APP_NAME
 output WEB_URL string = resources.outputs.WEB_URL
@@ -117,8 +145,9 @@ output APP_IDENTITY_CLIENT_ID string = resources.outputs.APP_IDENTITY_CLIENT_ID
 output GITHUB_IDENTITY_CLIENT_ID string = resources.outputs.GITHUB_IDENTITY_CLIENT_ID
 output GITHUB_IDENTITY_PRINCIPAL_ID string = resources.outputs.GITHUB_IDENTITY_PRINCIPAL_ID
 output LOAD_TEST_RESOURCE_NAME string = resources.outputs.LOAD_TEST_RESOURCE_NAME
-output PLAYWRIGHT_WORKSPACE_NAME string = resources.outputs.PLAYWRIGHT_WORKSPACE_NAME
-output PLAYWRIGHT_SERVICE_URL string = resources.outputs.PLAYWRIGHT_SERVICE_URL
+output PLAYWRIGHT_WORKSPACE_NAME string = playwright.outputs.PLAYWRIGHT_WORKSPACE_NAME
+output PLAYWRIGHT_RESOURCE_GROUP string = playwrightResourceGroupName
+output PLAYWRIGHT_SERVICE_URL string = playwright.outputs.PLAYWRIGHT_SERVICE_URL
 #disable-next-line outputs-should-not-contain-secrets
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = resources.outputs.APPLICATIONINSIGHTS_CONNECTION_STRING
 output APP_SERVICE_PLAN_ID string = resources.outputs.APP_SERVICE_PLAN_ID
@@ -126,3 +155,4 @@ output WEB_APP_ID string = resources.outputs.WEB_APP_ID
 output SQL_DATABASE_ID string = resources.outputs.SQL_DATABASE_ID
 output APP_INSIGHTS_ID string = resources.outputs.APP_INSIGHTS_ID
 output DEPLOYMENT_MODE string = deploymentMode
+output SQL_ADMIN_IS_APP_IDENTITY bool = resources.outputs.SQL_ADMIN_IS_APP_IDENTITY
