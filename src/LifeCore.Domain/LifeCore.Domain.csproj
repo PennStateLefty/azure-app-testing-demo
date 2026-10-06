@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\LifeCore.Contracts\LifeCore.Contracts.csproj" />
+  </ItemGroup>
+</Project>

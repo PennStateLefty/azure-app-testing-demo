@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LifeCore.Web\LifeCore.Web.csproj" />
+    <ProjectReference Include="..\..\src\LifeCore.Domain\LifeCore.Domain.csproj" />
+    <ProjectReference Include="..\..\src\LifeCore.Data\LifeCore.Data.csproj" />
+    <ProjectReference Include="..\..\src\LifeCore.Contracts\LifeCore.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>
