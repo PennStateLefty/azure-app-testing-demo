@@ -1,0 +1,256 @@
+name: Demo CI/CD and Azure App Testing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx playwright install --with-deps chromium firefox
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4.6.2
+        if: always()
+        with:
+          name: local-playwright-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+      - name: Package the tested application
+        run: zip -r app.zip src package.json package-lock.json
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: app
+          path: app.zip
+          retention-days: 7
+
+  deploy:
+    needs: ci
+    if: >-
+      vars.AZURE_ENABLED == 'true' &&
+      (github.ref == 'refs/heads/main' ||
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    environment: azure-demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      app-url: ${{ steps.infra.outputs.app-url }}
+      load-resource: ${{ steps.infra.outputs.load-resource }}
+      suffix: ${{ steps.infra.outputs.suffix }}
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_NAME_PREFIX: ${{ vars.AZURE_NAME_PREFIX }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          name: app
+      - uses: azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Provision isolated deployment target
+        id: infra
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$AZURE_NAME_PREFIX" =~ ^[a-z][a-z0-9-]{1,28}[a-z0-9]$ ]] || {
+            echo "AZURE_NAME_PREFIX must be 3–30 lowercase letters, digits, or hyphens."
+            exit 1
+          }
+          suffix=main
+          if [[ -n "$PR_NUMBER" ]]; then suffix="pr-$PR_NUMBER"; fi
+          deployment="demo-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          az deployment group create \
+            --name "$deployment" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters namePrefix="$AZURE_NAME_PREFIX" deploymentSuffix="$suffix" \
+            --output none
+          outputs=$(az deployment group show --name "$deployment" \
+            --resource-group "$AZURE_RESOURCE_GROUP" --query properties.outputs -o json)
+          echo "app-name=$(jq -r '.appName.value' <<< "$outputs")" >> "$GITHUB_OUTPUT"
+          echo "app-url=$(jq -r '.appUrl.value' <<< "$outputs")" >> "$GITHUB_OUTPUT"
+          echo "load-resource=$(jq -r '.loadTestingName.value' <<< "$outputs")" >> "$GITHUB_OUTPUT"
+          echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
+      - uses: azure/webapps-deploy@v3.0.6
+        with:
+          app-name: ${{ steps.infra.outputs.app-name }}
+          package: app.zip
+      - name: Wait for application readiness
+        env:
+          BASE_URL: ${{ steps.infra.outputs.app-url }}
+        run: |
+          set -euo pipefail
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 10 "$BASE_URL/api/health" |
+              jq -e '.status == "ok"' > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+          [[ "$ready" == true ]]
+          {
+            echo "### Deployed demo"
+            echo "- App: $BASE_URL"
+            echo "- Revision: $GITHUB_SHA"
+            echo "- PR: ${PR_NUMBER:-not a pull request}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  azure-playwright:
+    needs: deploy
+    environment: azure-demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      BASE_URL: ${{ needs.deploy.outputs.app-url }}
+      PLAYWRIGHT_SERVICE_URL: ${{ vars.PLAYWRIGHT_SERVICE_URL }}
+      PLAYWRIGHT_RUN_NAME: demo-${{ needs.deploy.outputs.suffix }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - uses: azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Run browsers and publish reports in Azure
+        run: npm run test:e2e:azure
+      - uses: actions/upload-artifact@v4.6.2
+        if: always()
+        with:
+          name: azure-playwright-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+      - name: Browser test summary
+        if: always()
+        run: |
+          {
+            echo "### Azure Playwright Testing"
+            echo "- Run: $PLAYWRIGHT_RUN_NAME"
+            echo "- Target: $BASE_URL"
+            echo "- Result: ${{ job.status }}"
+            echo "- HTML report and failure traces: azure-playwright-results artifact"
+            echo "- Cloud report: Azure portal → Playwright workspace → Test runs"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  azure-load:
+    needs: deploy
+    environment: azure-demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      BASE_URL: ${{ needs.deploy.outputs.app-url }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      LOAD_RESOURCE: ${{ needs.deploy.outputs.load-resource }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Set load test target
+        id: target
+        run: echo "host=${BASE_URL#https://}" >> "$GITHUB_OUTPUT"
+      - name: Run JMeter in Azure and enforce performance thresholds
+        uses: azure/load-testing@v1.2.1
+        with:
+          loadtestConfigFile: testing/load/azure-load-test.yaml
+          loadtestResource: ${{ env.LOAD_RESOURCE }}
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          loadtestRunName: demo-${{ needs.deploy.outputs.suffix }}-${{ github.run_id }}-${{ github.run_attempt }}
+          loadtestRunDescription: Revision ${{ github.sha }} in ${{ github.repository }}
+          overrideParameters: '{"testId":"storefront-${{ needs.deploy.outputs.suffix }}"}'
+          env: |
+            [
+              {"name":"TARGET_HOST","value":"${{ steps.target.outputs.host }}"},
+              {"name":"TARGET_PROTOCOL","value":"https"},
+              {"name":"TARGET_PORT","value":"443"}
+            ]
+      - uses: actions/upload-artifact@v4.6.2
+        if: always()
+        with:
+          name: azure-load-results
+          path: loadTest/
+          retention-days: 7
+      - name: Load test summary
+        if: always()
+        run: |
+          {
+            echo "### Azure Load Testing"
+            echo "- Resource: $LOAD_RESOURCE"
+            echo "- Target: $BASE_URL"
+            echo "- Result: ${{ job.status }}"
+            echo "- Gate: average latency ≤ 1000 ms and errors ≤ 1%"
+            echo "- Results: azure-load-results artifact and Azure portal → Load Testing → Tests"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  cleanup-pr:
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      vars.AZURE_ENABLED == 'true'
+    environment: azure-demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_NAME_PREFIX: ${{ vars.AZURE_NAME_PREFIX }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Remove PR app if it was deployed
+        run: |
+          set -euo pipefail
+          app_name="$AZURE_NAME_PREFIX-pr-$PR_NUMBER"
+          app_id=$(az webapp list --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "[?name=='$app_name'].id | [0]" -o tsv)
+          if [[ -n "$app_id" ]]; then az webapp delete --ids "$app_id"; fi
