@@ -70,7 +70,11 @@ public static class LifeCoreEndpoints
         var key = $"kpis:{underwriter}";
         if (perf.CurrentValue.UseOptimizedQueries && cache.TryGetValue(key, out DashboardKpisDto? cached)) return Results.Ok(cached);
         var q = db.Cases.AsQueryable();
-        if (!string.IsNullOrWhiteSpace(underwriter)) q = q.Where(c => c.AssignedUnderwriter == underwriter || SeedConventions.Underwriters.Any(u => u.Id == underwriter && u.DisplayName == c.AssignedUnderwriter));
+        if (!string.IsNullOrWhiteSpace(underwriter))
+        {
+            var display = SeedConventions.Underwriters.FirstOrDefault(u => u.Id == underwriter)?.DisplayName ?? underwriter;
+            q = q.Where(c => c.AssignedUnderwriter == display);
+        }
         if (!perf.CurrentValue.UseOptimizedQueries) q = q.Include(c => c.Requirements).AsTracking(); else q = q.AsNoTracking();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var open = await q.CountAsync(c => c.Status != CaseStatus.Decisioned && c.Status != CaseStatus.Withdrawn, ct);
@@ -84,14 +88,15 @@ public static class LifeCoreEndpoints
         return Results.Ok(dto);
     }
 
-    private static async Task<IResult> GetWorklist(WorklistView view, CaseStatus? status, string? product, Priority? priority, string? search, string? underwriter, int? page, int? pageSize, string? sort, LifeCoreDbContext db, IOptionsMonitor<PerfOptions> perf, CancellationToken ct)
+    private static async Task<IResult> GetWorklist(WorklistView view, string? status, string? product, string? priority, string? search, string? underwriter, int? page, int? pageSize, string? sort, LifeCoreDbContext db, IOptionsMonitor<PerfOptions> perf, CancellationToken ct)
     {
         var pageNumber = Math.Max(1, page ?? 1); var pageLimit = Math.Clamp(pageSize ?? 25, 1, 100);
         IQueryable<UnderwritingCase> cq = db.Cases.Include(c => c.Applicant).Include(c => c.Product).Include(c => c.Tasks);
         cq = perf.CurrentValue.UseOptimizedQueries ? cq.AsNoTracking() : cq.AsTracking();
-        if (status.HasValue) cq = cq.Where(c => c.Status == status);
+        // Status/priority bind as strings so empty query values (status=&priority=) mean "no filter" instead of a 400.
+        if (Enum.TryParse<CaseStatus>(status, true, out var statusFilter)) cq = cq.Where(c => c.Status == statusFilter);
         if (!string.IsNullOrWhiteSpace(product)) cq = cq.Where(c => c.ProductCode == product);
-        if (priority.HasValue) cq = cq.Where(c => c.Priority == priority);
+        if (Enum.TryParse<Priority>(priority, true, out var priorityFilter)) cq = cq.Where(c => c.Priority == priorityFilter);
         if (!string.IsNullOrWhiteSpace(underwriter))
         {
             var display = SeedConventions.Underwriters.FirstOrDefault(u => u.Id == underwriter)?.DisplayName ?? underwriter;

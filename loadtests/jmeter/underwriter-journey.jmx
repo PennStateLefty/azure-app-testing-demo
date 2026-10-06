@@ -10,9 +10,9 @@
     </TestPlan>
     <hashTree>
       <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Request Defaults" enabled="true">
-        <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
-        <stringProp name="HTTPSampler.port">${__P(port,)}</stringProp>
-        <stringProp name="HTTPSampler.protocol">${__P(protocol,http)}</stringProp>
+        <stringProp name="HTTPSampler.domain">${__groovy(System.getenv('host') ?: props.getProperty('host') ?: 'localhost')}</stringProp>
+        <stringProp name="HTTPSampler.port">${__groovy(System.getenv('port') ?: props.getProperty('port') ?: '')}</stringProp>
+        <stringProp name="HTTPSampler.protocol">${__groovy(System.getenv('protocol') ?: props.getProperty('protocol') ?: 'http')}</stringProp>
         <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
         <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
         <stringProp name="HTTPSampler.connect_timeout">10000</stringProp>
@@ -37,10 +37,10 @@
           <boolProp name="LoopController.continue_forever">true</boolProp>
           <stringProp name="LoopController.loops">-1</stringProp>
         </elementProp>
-        <stringProp name="ThreadGroup.num_threads">${__P(threads,50)}</stringProp>
-        <stringProp name="ThreadGroup.ramp_time">${__P(rampup,60)}</stringProp>
+        <stringProp name="ThreadGroup.num_threads">${__groovy(System.getenv('threads') ?: props.getProperty('threads') ?: '50')}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__groovy(System.getenv('rampup') ?: props.getProperty('rampup') ?: '60')}</stringProp>
         <boolProp name="ThreadGroup.scheduler">true</boolProp>
-        <stringProp name="ThreadGroup.duration">${__P(duration,300)}</stringProp>
+        <stringProp name="ThreadGroup.duration">${__groovy(System.getenv('duration') ?: props.getProperty('duration') ?: '300')}</stringProp>
         <stringProp name="ThreadGroup.delay" />
         <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
       </ThreadGroup>
@@ -67,8 +67,8 @@
         </HeaderManager>
         <hashTree />
         <UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="Uniform think time 1-3s (scaled)" enabled="true">
-          <stringProp name="ConstantTimer.delay">${__jexl3(1000 * ${__P(thinkScale,1)})}</stringProp>
-          <stringProp name="RandomTimer.range">${__jexl3(2000 * ${__P(thinkScale,1)})}</stringProp>
+          <stringProp name="ConstantTimer.delay">${__jexl3(1000 * ${__groovy(System.getenv('thinkScale') ?: props.getProperty('thinkScale') ?: '1')})}</stringProp>
+          <stringProp name="RandomTimer.range">${__jexl3(2000 * ${__groovy(System.getenv('thinkScale') ?: props.getProperty('thinkScale') ?: '1')})}</stringProp>
         </UniformRandomTimer>
         <hashTree />
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET dashboard KPIs" enabled="true">
@@ -277,7 +277,11 @@
         <ThroughputController guiclass="ThroughputControllerGui" testclass="ThroughputController" testname="10% submit decision" enabled="true">
           <intProp name="ThroughputController.style">1</intProp>
           <boolProp name="ThroughputController.perThread">false</boolProp>
-          <floatProp name="ThroughputController.percentThroughput">10.0</floatProp>
+          <FloatProperty>
+            <name>ThroughputController.percentThroughput</name>
+            <value>10.0</value>
+            <savedValue>0.0</savedValue>
+          </FloatProperty>
         </ThroughputController>
         <hashTree>
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST decision" enabled="true">
@@ -318,7 +322,11 @@
         <ThroughputController guiclass="ThroughputControllerGui" testclass="ThroughputController" testname="5% order requirement" enabled="true">
           <intProp name="ThroughputController.style">1</intProp>
           <boolProp name="ThroughputController.perThread">false</boolProp>
-          <floatProp name="ThroughputController.percentThroughput">5.0</floatProp>
+          <FloatProperty>
+            <name>ThroughputController.percentThroughput</name>
+            <value>5.0</value>
+            <savedValue>0.0</savedValue>
+          </FloatProperty>
         </ThroughputController>
         <hashTree>
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST order requirement" enabled="true">
