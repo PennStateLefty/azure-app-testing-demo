@@ -40,7 +40,7 @@ npx playwright test -c playwright.service.config.ts --workers=20
 
 The Playwright Workspace must have reporting enabled, a linked Storage account, and Storage Blob Data Contributor for every local or CI principal that runs tests. Trace viewing also requires Blob CORS for `https://trace.playwright.dev` with `GET` and `OPTIONS`.
 
-> **Known limitation in the demo subscription:** a tenant policy forces `publicNetworkAccess=Disabled` on storage accounts, and Playwright Workspaces reporting cannot upload through private endpoints. Tests run and pass on the workspace, but portal run details stay empty until the reporting storage account is exempted (for example, tag it `SecurityControl=Ignore`) or the policy is relaxed. Until then, use the `playwright-report` HTML artifact from the `ui-tests` workflow.
+> **Network security perimeter:** a tenant policy forces `publicNetworkAccess=Disabled` on storage, and Playwright reporting cannot upload through private endpoints. `infra/modules/playwright.bicep` therefore sets the reporting account to `publicNetworkAccess=SecuredByPerimeter` and associates it (Enforced mode) with a network security perimeter whose inbound rule allows the deployment subscription. The GitHub OIDC identity lives in that subscription, so CI uploads succeed; other callers (for example, a laptop) are denied. Subscription rules don't accept SAS requests, so if portal trace/report viewing is blocked, pass viewer egress CIDRs through the `reportViewerAddressPrefixes` parameter. NSP access logs (`NSPAccessLogs`) show the source IP and matched rule for troubleshooting.
 
 ## Categories
 

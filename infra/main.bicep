@@ -127,6 +127,9 @@ module resources 'modules/lifecore.bicep' = {
   }
 }
 
+@description('Optional IPv4 CIDRs allowed to read Playwright reports from the portal (SAS requests are not covered by the subscription rule).')
+param reportViewerAddressPrefixes array = []
+
 module playwright 'modules/playwright.bicep' = {
   name: 'lifecore-playwright-${environmentName}'
   scope: resourceGroup(playwrightResourceGroupName)
@@ -141,6 +144,7 @@ module playwright 'modules/playwright.bicep' = {
     testRunnerPrincipalIds: union([
       sqlAdminObjectId
     ], testRunnerPrincipalIds)
+    reportViewerAddressPrefixes: reportViewerAddressPrefixes
   }
 }
 
