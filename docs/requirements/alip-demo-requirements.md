@@ -2,7 +2,7 @@
 
 > **Purpose:** Input document for planning mode. It describes a mock web app based on the publicly documented capabilities of the **Accenture Life Insurance & Annuity Platform (ALIP)**. The app has up to three screens, a .NET 10 front end and back end, Playwright UI tests and JMeter load tests that both run in **Azure App Testing**, and Bicep infrastructure as code for an Azure deployment.
 >
-> **Status:** Draft v1, 2026-10-06. Items tagged **[DECISION]** are recommended defaults that planning can override.
+> **Status:** Approved for implementation, 2026-10-06. Items tagged **[DECIDED]** are settled planning decisions.
 
 ---
 
@@ -54,26 +54,35 @@ Accenture hasn't published screenshots that can be reproduced. The descriptions 
 2. Show **Azure App Testing** end to end:
    - **Playwright Workspaces**: cloud-parallel browser tests against the front end.
    - **Azure Load Testing**: JMeter scripts that load the back-end REST APIs, with server-side metrics from App Insights.
-3. Deploy everything to Azure with **Bicep** in a single command (for example `azd up`), and run the tests from CI (GitHub Actions).
+3. Provision Azure infrastructure with **Bicep** through `azd provision`, deploy the app through GitHub Actions, and run the tests from CI.
 
 ### 2.2 Non-goals
 
 - No real actuarial calculations, real underwriting rules, or real integrations (ACORD, MIB, Rx, labs).
 - No real PII. All data is synthetic.
 - No production-grade multi-tenant auth. The demo uses a simple persona switcher (see 4.4).
-- No copying of Accenture trademarks, logos, color schemes, or proprietary screen layouts.
+- No copying of Accenture trademarks, logos, wordmarks, or proprietary screen layouts.
 
 ### 2.3 Branding
 
-- **[DECISION]** Use a fictional product name, such as **"LifeCore Suite (ALIP-style demo)"**, and a fictional carrier, such as "Contoso Life & Annuity".
-- Show a footer disclaimer: *"Demo application. Not affiliated with or endorsed by Accenture."*
+- **[DECIDED]** Use the fictional product name **"LifeCore Suite"** and the fictional carrier/tenant **"Contoso Life & Annuity"**.
+- Show a footer disclaimer: *"Demo application – not affiliated with or endorsed by Accenture. Synthetic data only."*
 - Refer to "ALIP" only in docs, never as an in-app brand.
+- Do not use the Accenture logo or wordmark.
+
+#### Design language
+
+Because research found no distinct, publicly documented ALIP design system, the demo adopts Accenture's public design language rather than inventing a separate ALIP-specific style. Brand-color and typography references are grounded in Accenture public brand materials (2020 rebrand).
+
+- **Palette:** Core Purple `#A100FF` for primary actions, accents, and active states; Black `#000000` for the top app bar and headings; White for surfaces; Dark Purple `#7500C0` for hover and secondary states; Deep Purple `#460073` for tertiary accents and chart series; light neutral `#F2F2F2` for page backgrounds; `#E6E6E6` for borders and dividers.
+- **Style:** flat, high-contrast enterprise UI with generous whitespace, small border radius, restrained card shadows, dense but readable data grids, and the `>` chevron as a subtle navigation and emphasis motif.
+- **Typography:** font stack `"Graphik", "Inter", Arial, sans-serif`. Graphik is Accenture's brand typeface and requires a commercial license from Commercial Type, so it is **not bundled**. Inter is self-hosted under the SIL Open Font License as the fallback.
 
 ---
 
 ## 3. Screens (maximum of three)
 
-**[DECISION]** These three screens follow the underwriting workflow that Accenture describes in its own demo video, and then the in-force servicing step. Together they cover New Business/UW, Policy Admin, and Billing. An alternative to Screen 3 is listed at the end of this section.
+**[DECIDED]** These three screens follow the underwriting workflow that Accenture describes in its own demo video, and then the in-force servicing step. Together they cover New Business/UW, Policy Admin, and Billing. Product Configuration Workbench was considered as Screen 3 and not selected.
 
 ### Screen 1: Underwriting Case Dashboard (`/dashboard`)
 
@@ -101,7 +110,7 @@ Accenture hasn't published screenshots that can be reproduced. The descriptions 
 |---|---|
 | **Case header** | Case #, Applicant, DOB/Age, Product, Face Amount, Agent, Status, Days open. |
 | **Tabs** | **Overview** (application data, with out-of-bounds fields highlighted, for example BMI or face amount vs. income), **Requirements** (APS, Labs, Rx, MVR, MIB rows with status, ordered/received dates, and an "Order requirement" action), **Risk Assessment** (build/BMI, medical history, avocations, and a **suggested risk class** from a mock rules engine), **Notes & History** (timeline). |
-| **AI Case Summary (mock)** | Card with a deterministic, template-generated summary such as "3 of 5 requirements received; BMI 31.2 outside preferred range…". **[DECISION]** No LLM call by default. This keeps load tests deterministic. |
+| **AI Case Summary (mock)** | Card with a deterministic, template-generated summary such as "3 of 5 requirements received; BMI 31.2 outside preferred range…". **[DECIDED]** No LLM call by default and no Azure OpenAI dependency. This keeps load tests deterministic. |
 | **Decision panel** | Choose a risk class (Preferred Plus, Preferred, Standard Plus, Standard, Table 2–8, Decline), add a reason and a note, then **Submit Decision**. The API validates the request: it rejects the decision if required requirements are outstanding, unless the user overrides. |
 
 **Key interactions to test:** tab navigation, ordering a requirement, out-of-bounds alerts showing, the decision validation error path, the decision success path (status changes on the Dashboard).
@@ -121,7 +130,7 @@ Accenture hasn't published screenshots that can be reproduced. The descriptions 
 
 **Key interactions to test:** search, tab switching, the beneficiary-change validation, a loan quote, and the new transaction appearing in history.
 
-> **Alternative Screen 3 (if the product-configuration story fits the audience better):** a *Product Configuration Workbench* with a product template list, a detail view (summary, approvals, transactions, features, funds), and a rate table grid (Age × Face Amount) with list and graphical rule views. Planning should choose one. Policy 360 is recommended because it gives the most realistic read-heavy load profile.
+> **Alternative Screen 3 (not selected):** a *Product Configuration Workbench* with a product template list, a detail view (summary, approvals, transactions, features, funds), and a rate table grid (Age × Face Amount) with list and graphical rule views. Policy 360 was chosen because it gives the most realistic read-heavy load profile and covers in-force servicing.
 
 ### 3.4 Shared layout
 
@@ -136,15 +145,15 @@ Accenture hasn't published screenshots that can be reproduced. The descriptions 
 
 ### 4.1 Technology stack
 
-| Concern | **[DECISION]** Recommendation | Rationale |
+| Concern | **[DECIDED]** Recommendation | Rationale |
 |---|---|---|
 | Runtime | **.NET 10 (LTS)**, C# 14 | Latest GA (10.0.x, Sept 2026). .NET 11 isn't GA until Nov 2026. |
-| Front end | **Blazor WebAssembly** client (in a Blazor Web App with **InteractiveWebAssembly** render mode). Component library: **MudBlazor** or **FluentUI Blazor**. | All UI → back end traffic is **plain HTTP/JSON**, which JMeter can replay. Blazor **Server** routes UI events over a SignalR WebSocket, which JMeter can't realistically load test. |
+| Front end | **Blazor WebAssembly** client (in a Blazor Web App with **InteractiveWebAssembly** render mode). Component library: **MudBlazor** with a custom Accenture-palette theme. | All UI → back end traffic is **plain HTTP/JSON**, which JMeter can replay. Blazor **Server** routes UI events over a SignalR WebSocket, which JMeter can't realistically load test. |
 | Back end | **ASP.NET Core Minimal APIs** under `/api/v1/*`, with OpenAPI (built-in `Microsoft.AspNetCore.OpenApi`) and a Scalar or Swagger UI | A REST surface that load tests can target directly, mirroring ALIP's REST/JSON gateway and Swagger docs. |
 | Hosting model | **One deployable**: the ASP.NET Core host serves the WASM static assets *and* the API. The client and the API are separate projects. | Meets the "same binary is fine" requirement while keeping a clean API boundary for load tests. |
-| Data | **EF Core 10**. **Azure SQL Database (serverless, GP_S_Gen5)** in Azure; **SQLite** or the in-memory provider locally. Seed data is deterministic (fixed seed). | Gives realistic DB latency under load. Seeding makes test data predictable. |
-| Auth to data | **Managed identity** (Entra-only auth on Azure SQL; no SQL passwords) | Secure by default. |
-| Orchestration (local) | **.NET Aspire** AppHost (optional) | Local dashboard, telemetry, and SQL container. |
+| Data | **EF Core 10**. **Azure SQL Database serverless** in Azure with Entra-only authentication through a user-assigned managed identity; **SQLite** locally. Schema is created with `EnsureCreated` for both providers, and seed data is deterministic at startup. | Gives realistic DB latency under load. Seeding makes test data predictable. Two providers keep local development lightweight without changing API behavior. |
+| Auth to data | **User-assigned managed identity** for Azure SQL; local development uses SQLite. | Secure by default; no SQL passwords. |
+| Orchestration (local) | **No .NET Aspire** in v1. | Keeps the demo focused and avoids extra projects that aren't needed for Azure App Testing. |
 | Observability | **OpenTelemetry → Azure Monitor** (Application Insights + Log Analytics) | Server-side metrics are linked into Azure Load Testing results. |
 | Health | `/health/live`, `/health/ready` | Used by App Service health check and as a load-test smoke step. |
 
@@ -152,23 +161,25 @@ Accenture hasn't published screenshots that can be reproduced. The descriptions 
 
 ```
 src/
-  LifeCore.AppHost/            (optional) .NET Aspire orchestration
-  LifeCore.ServiceDefaults/    OTel, health checks, resilience
   LifeCore.Web/                ASP.NET Core host: Minimal APIs + serves WASM client
   LifeCore.Web.Client/         Blazor WebAssembly UI (3 screens)
+  LifeCore.Contracts/          Shared DTOs, routes, and seed conventions
   LifeCore.Domain/             Entities, enums, rules (risk class, validation)
-  LifeCore.Data/               EF Core DbContext, migrations, seeder
+  LifeCore.Data/               EF Core DbContext, EnsureCreated schema setup, seeder
 tests/
-  LifeCore.UnitTests/          xUnit domain/API tests
+  LifeCore.UnitTests/          xUnit v3 domain/API tests
   LifeCore.PlaywrightTests/    NUnit + Microsoft.Playwright + Azure.Developer.Playwright.NUnit
 loadtests/
   jmeter/*.jmx                 JMeter scripts
   jmeter/data/*.csv            Parameter data (case IDs, policy numbers)
-  load-test-config.yaml        Azure Load Testing test definition(s)
+  smoke.yaml                   Azure Load Testing smoke definition
+  underwriter-journey.yaml     Azure Load Testing underwriting scenario definition
+  csr-policy-servicing.yaml    Azure Load Testing servicing scenario definition
+  mixed-peak.yaml              Azure Load Testing peak scenario definition
 infra/
   main.bicep, modules/*.bicep, main.parameters.json
-azure.yaml                     azd project
-.github/workflows/             build-deploy.yml, ui-tests.yml, load-tests.yml
+azure.yaml                     azd project for provisioning only
+.github/workflows/             ci.yml, provision.yml, deploy-app.yml, ui-tests.yml, load-tests.yml
 ```
 
 ### 4.3 Domain model (minimum)
@@ -183,9 +194,9 @@ azure.yaml                     azd project
 - **Policy** (PolicyNumber, ProductCode, Status, IssueDate, OwnerId, InsuredId, AgentId, FaceAmount, AccountValue, CashSurrenderValue, BillingMode, ModalPremium, NextDueDate)
 - **Coverage/Rider**, **Beneficiary** (PartyId, Type [Primary/Contingent], Percent), **FundAllocation**, **Payment**, **PolicyTransaction** (Type, Status, EffectiveDate, Amount)
 
-**Seed volumes [DECISION]:** about 50 agents, about 2,000 cases (with roughly 8,000 requirements and tasks), and about 10,000 policies. This is enough for meaningful paging and query cost under load.
+**Seed volumes [DECIDED]:** about 50 agents, about 2,000 cases (with roughly 8,000 requirements and tasks), and about 10,000 policies. This is enough for meaningful paging and query cost under load.
 
-### 4.4 Authentication [DECISION]
+### 4.4 Authentication [DECIDED]
 
 - **Default:** no real authentication. A **persona switcher** (Underwriter / CSR) sets a header or cookie. This keeps JMeter and Playwright scripts simple.
 - **Optional stretch:** App Service Easy Auth with Entra ID. In that case, tests use a test-user storage state, and load tests call the API with a client-credentials token. This is out of scope for v1.
@@ -200,7 +211,7 @@ azure.yaml                     azd project
 | `GET /api/v1/cases/{caseNumber}/requirements` | 2 | Read |
 | `POST /api/v1/cases/{caseNumber}/requirements` | 2 | Write |
 | `GET /api/v1/cases/{caseNumber}/risk-assessment` | 2 | Compute (mock rules engine) |
-| `GET /api/v1/cases/{caseNumber}/summary` | 2 | Compute (templated "AI" summary) |
+| `GET /api/v1/cases/{caseNumber}/summary` | 2 | Compute (templated "AI" summary; Azure OpenAI is out of scope) |
 | `POST /api/v1/cases/{caseNumber}/decision` | 2 | Write and validation (returns 422 on rule failure) |
 | `GET/POST /api/v1/cases/{caseNumber}/chat` | 1 | Light read/write |
 | `GET /api/v1/policies?query=&page=` | 3 | Search (LIKE / indexed) |
@@ -222,8 +233,7 @@ azure.yaml                     azd project
 
 ### 5.1 Playwright UI tests (Playwright Workspaces in Azure App Testing)
 
-- **[DECISION] Language:** **C# / NUnit**, using `Microsoft.Playwright.NUnit` and **`Azure.Developer.Playwright.NUnit`**, so the repo stays all-.NET. Authenticate to the workspace with **Entra ID** (`DefaultAzureCredential`, using GitHub OIDC in CI). Access tokens aren't used.
-  - Alternative: TypeScript with `@playwright/test` and `@azure/playwright`, which has richer reporting. Planning should confirm.
+- **[DECIDED] Language:** **C# / NUnit**, using `Microsoft.Playwright.NUnit` and **`Azure.Developer.Playwright.NUnit`**, so the repo stays all-.NET. Authenticate to the workspace with **Entra ID** (`DefaultAzureCredential`, using GitHub OIDC in CI). Access tokens aren't used. TypeScript with `@playwright/test` and `@azure/playwright` was considered and not selected.
 - **Configuration:** the workspace region endpoint comes from the `PLAYWRIGHT_SERVICE_URL` environment variable. The base URL comes from `BASE_URL`. Run Chromium, Firefox, and WebKit in parallel (for example 20 workers). Enable workspace reporting.
 - **Minimum test suites:**
   1. **Dashboard:** KPI tiles render with values. The By Task / By Case toggle works. Filtering by status narrows the rows. Paging works. Clicking a row opens the case summary. "Open in Workbench" navigates correctly.
@@ -245,41 +255,49 @@ azure.yaml                     azd project
   | `mixed-peak.jmx` | 60% CSR / 40% UW, ramp to peak | Capacity test |
   | `smoke.jmx` | `/health/ready` plus one call per endpoint, 1 VU | Pipeline gate |
 
-- **Test definition:** `load-test-config.yaml` (Azure Load Testing YAML) contains:
+- **Test definitions:** one Azure Load Testing YAML per scenario (`smoke.yaml`, `underwriter-journey.yaml`, `csr-policy-servicing.yaml`, `mixed-peak.yaml`) contains:
   - `engineInstances`
   - **failure criteria**, for example `avg(response_time_ms) > 500`, `percentage(error) > 1`, and per-request p90 thresholds
   - `autoStop`
   - app components: App Service, SQL, and App Insights, so **server-side metrics** are collected
   - optional **multi-region** load
 - **Execution:** run from GitHub Actions with `azure/load-testing@v1` (or `az load test create/update` plus `az load test-run create`). The workflow publishes results as artifacts and fails the build when failure criteria are breached.
-- **Demo story:** the first run shows a bottleneck. Ideas: an unindexed policy search, or an N+1 query in the worklist. A fixed build shows the improvement (for example after adding an index, `AsNoTracking`, or output caching on KPIs). **[DECISION]** Include a feature flag such as `Perf:UseOptimizedQueries` so the before/after comparison can be shown without a redeploy.
+- **Demo story:** the first Azure deployment defaults `Perf:UseOptimizedQueries` to `false`, so the first load run shows the intended bottleneck (for example an unindexed policy search or an N+1 query in the worklist). Flip the App Service app setting to `true` to show the improvement without a redeploy.
 
 ---
 
-## 6. Azure infrastructure (Bicep, deployed with `azd`)
+## 6. Azure infrastructure (Bicep, provisioned with `azd`)
 
-**[DECISION]** All resources go in one resource group per environment (`rg-lifecore-<env>`). Region is a parameter (default `eastus2`; it must support Playwright Workspaces and Load Testing).
+**[DECIDED]** All resources go in one resource group per environment (`rg-lifecore-<env>`). Region is a parameter (default `eastus2`; it must support Playwright Workspaces and Load Testing).
 
 | Resource | Type / API (verify at implementation time) | Notes |
 |---|---|---|
 | Log Analytics workspace | `Microsoft.OperationalInsights/workspaces` | |
 | Application Insights | `Microsoft.Insights/components` (workspace-based) | Connection string goes to the app |
-| User-assigned managed identity | `Microsoft.ManagedIdentity/userAssignedIdentities` | For app → SQL and app → Key Vault access |
-| App Service plan (Linux) | `Microsoft.Web/serverfarms` (**P0v3/P1v3**), autoscale rules | Scaling out is visible under load |
-| Web App | `Microsoft.Web/sites` (linuxFxVersion `DOTNETCORE\|10.0`), health check `/health/ready`, Always On, HTTPS only | **[DECISION]** App Service. Alternative: Azure Container Apps with a container image in ACR. |
+| User-assigned managed identities | `Microsoft.ManagedIdentity/userAssignedIdentities` | App identity for app → SQL; GitHub deployment identity for OIDC workflows |
+| App Service plan (Linux) | `Microsoft.Web/serverfarms` (**P1v3**), autoscale rules | Scaling out is visible under load |
+| Web App | `Microsoft.Web/sites` (linuxFxVersion `DOTNETCORE\|10.0`), health check `/health/ready`, Always On, HTTPS only | **[DECIDED]** App Service on Linux. Container Apps was considered and not selected. |
 | Azure SQL server + database | `Microsoft.Sql/servers` (Entra-only admin), `databases` (serverless GP_S_Gen5_2, auto-pause off during demos) | |
 | Key Vault (optional) | `Microsoft.KeyVault/vaults` (RBAC) | Only if secrets are needed |
 | **Azure Load Testing** | `Microsoft.LoadTestService/loadTests@2022-12-01` (GA) | Test definitions are created through the data plane (CLI or GitHub Action), not Bicep |
 | **Playwright Workspace** | `Microsoft.LoadTestService/playwrightWorkspaces@2025-09-01` (GA; previews up to 2026-08-01-preview) | Properties: `localAuth: 'Disabled'` (Entra only), `regionalAffinity: 'Enabled'`, `reporting: 'Enabled'`, optional `storageUri` for reports |
 | Storage account (optional) | `Microsoft.Storage/storageAccounts` | Playwright report storage |
-| Role assignments | `Microsoft.Authorization/roleAssignments` | CI identity → Load Test Contributor; CI identity → Playwright workspace Contributor/Owner; app MI → SQL database user (via deployment script or post-provision hook) |
+| Role assignments | `Microsoft.Authorization/roleAssignments` | GitHub user-assigned managed identity → Website Contributor on the web app, Load Test Contributor, Contributor on the Playwright workspace, and Reader on the resource group; app managed identity → SQL contained user through the post-provision hook |
 
 **Outputs:** `WEB_URL`, `LOAD_TEST_RESOURCE_NAME`, `PLAYWRIGHT_SERVICE_URL`, `APPINSIGHTS_CONNECTION_STRING`, and the resource IDs for server-side metric components.
 
+**Deployment constraint:** the target subscription has an Azure Policy that blocks zip deploy to App Service. `azd` is used for provisioning only, not for app deployment. Bicep exposes a `deploymentMode` parameter so the deployment path can be switched without redesigning the infrastructure. A post-provision hook creates the SQL contained user for the app identity.
+
+**Primary deployment mode: `githubActions`.** App Service continuous deployment uses the GitHub Actions build provider described by Microsoft Learn: https://learn.microsoft.com/azure/app-service/deploy-continuous-deployment?tabs=github#github-actions. The `deploy-app.yml` workflow builds and publishes `src/LifeCore.Web`, then deploys with `azure/webapps-deploy` using GitHub OIDC and a GitHub user-assigned managed identity. Bicep creates the federated credentials and grants that identity Website Contributor on the web app. **Risk:** `azure/webapps-deploy` uses OneDeploy/ZipDeploy under the hood and may be blocked by the same policy, so validate this early with a deploy spike.
+
+**Fallback deployment mode: `appServiceBuild`.** App Service Build Service (Kudu/Oryx) is configured with `Microsoft.Web/sites/sourcecontrols` and `isGitHubAction=false`; the GitHub webhook causes App Service to clone and build the repo. A root `.deployment` file sets `PROJECT=src/LifeCore.Web/LifeCore.Web.csproj`. Prerequisites and risks: one-time GitHub token registration, SCM basic publishing credentials must be allowed, and Oryx must support `net10.0`; otherwise use a custom deploy script alternative.
+
 **CI/CD (GitHub Actions, OIDC federated credential, no secrets):**
-1. `build-deploy.yml`: restore, build, unit test, publish, then `azd provision` + `azd deploy`.
-2. `ui-tests.yml`: `dotnet test tests/LifeCore.PlaywrightTests` against the Playwright Workspace. Publishes results and the trace viewer.
-3. `load-tests.yml`: `azure/load-testing` with `load-test-config.yaml` (smoke on every deploy, peak on manual dispatch).
+1. `ci.yml`: restore, build, and run unit tests.
+2. `provision.yml`: run `azd provision` and the post-provision SQL contained-user hook.
+3. `deploy-app.yml`: build/publish the web app and deploy through the selected `deploymentMode` path.
+4. `ui-tests.yml`: `dotnet test tests/LifeCore.PlaywrightTests` against the Playwright Workspace. Publishes results and the trace viewer.
+5. `load-tests.yml`: `azure/load-testing` with the scenario YAML files (smoke on every deploy, peak on manual dispatch).
 
 ---
 
@@ -296,15 +314,28 @@ azure.yaml                     azd project
 
 ---
 
-## 8. Open questions for planning
+## 8. Planning decisions and remaining open items
 
-1. Screen 3: **Policy 360** (recommended) or **Product Configuration Workbench**?
-2. Playwright language: **C#/NUnit** (recommended, all-.NET) or **TypeScript** (richer Playwright ecosystem)?
-3. Hosting: **App Service** (recommended, simplest) or **Container Apps**?
-4. Data store: **Azure SQL serverless** (recommended) or **PostgreSQL Flexible Server**, or in-memory only (cheapest, but less realistic load results)?
-5. Include .NET Aspire for local orchestration? (Recommended: yes, as an optional AppHost.)
-6. Should the "AI case summary" call Azure OpenAI as an opt-in stretch goal?
-7. CI platform: GitHub Actions (assumed) or Azure DevOps?
+### 8.1 Resolved decisions
+
+| Question | Decision |
+|---|---|
+| Screen 3 | **Policy 360** is selected; Product Configuration Workbench remains a documented alternative but is not part of v1. |
+| Visual design / branding | Adopt Accenture's public design language and palette because no distinct public ALIP design system was found; do not use Accenture logos or wordmarks. |
+| Component library | **MudBlazor** with a custom Accenture-palette theme. |
+| Playwright language | **C# / NUnit** with `Azure.Developer.Playwright.NUnit` and Entra authentication. |
+| Hosting | **App Service Linux P1v3** with `DOTNETCORE\|10.0`. |
+| Deployment method | Primary: App Service continuous deployment with the GitHub Actions build provider and `azure/webapps-deploy` through OIDC. Fallback: App Service Build Service (Kudu/Oryx). `azd` provisions only. |
+| Data and database auth | EF Core 10, Azure SQL serverless with Entra-only authentication via user-assigned managed identity, SQLite locally, `EnsureCreated` schema setup for both providers, deterministic startup seed. |
+| CI platform and workflows | GitHub Actions: `ci.yml`, `provision.yml`, `deploy-app.yml`, `ui-tests.yml`, and `load-tests.yml`. |
+| .NET Aspire | Out of scope for v1. |
+| Azure OpenAI / live LLM | Out of scope; AI case summary is deterministic and templated. |
+
+### 8.2 Open items
+
+1. Whether Oryx supports building `net10.0` in fallback `appServiceBuild` mode in the target App Service environment.
+2. Exact Playwright Workspaces region availability for the chosen Azure region.
+3. Whether the subscription's zip-deploy policy also blocks `azure/webapps-deploy` / OneDeploy in the primary deployment mode.
 
 ---
 
@@ -317,6 +348,7 @@ azure.yaml                     azd project
 - Accenture, *ALIP Release 5.2 announcement* (July 2018). Describes the Case Workbench, Business Configuration Workbench and Debugger, Product Testing Workbench, and portals: https://www.accenture.com/content/dam/accenture/final/corporate/company-information/document/ALIP-5-2-Announcement-July-2018.pdf
 - Accenture, *ALIP Portal* brochures (2018/2021): https://www.accenture.com/content/dam/accenture/final/industry/insurance/document/Accenture-ALIP-Portal-May-2021.pdf
 - Accenture Newsroom, *ALIP achieves Luminary status* (2022): https://newsroom.accenture.com/news/2022/accenture-life-insurance-and-annuity-platform-achieves-luminary-status-and-wins-two-xcelent-awards
+- Accenture public brand materials (2020 rebrand) for brand colors and Graphik usage.
 - Celent, *GenAI in Underwriting: ALIP Co-Pilot*: https://www.celent.com/insights/642683863
 - Microsoft Learn, *What is Azure App Testing?*: https://learn.microsoft.com/azure/app-testing/overview-what-is-azure-app-testing
 - Microsoft Learn, Bicep reference for `Microsoft.LoadTestService/playwrightWorkspaces`: https://learn.microsoft.com/azure/templates/microsoft.loadtestservice/playwrightworkspaces
