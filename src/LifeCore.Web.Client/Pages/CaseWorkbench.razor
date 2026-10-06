@@ -14,14 +14,14 @@
 
     @if (_isLoading)
     {
-        <MudPaper Class="pa-8 d-flex align-center gap-4" Elevation="0" Outlined="true" UserAttributes='@Attrs("case-loading")'>
+        <MudPaper Class="pa-8 d-flex align-center gap-4" Elevation="0" Outlined="true" data-testid="case-loading">
             <MudProgressCircular Indeterminate="true" Color="Color.Primary" aria-label="Loading case workbench" />
             <MudText Typo="Typo.h6">Loading case workbench...</MudText>
         </MudPaper>
     }
     else if (_case is null)
     {
-        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" UserAttributes='@Attrs("case-not-found")'>
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" data-testid="case-not-found">
             Case @CaseNumber was not found. Return to the dashboard to pick another case.
         </MudAlert>
     }
@@ -29,7 +29,7 @@
     {
         <MudGrid Spacing="3">
             <MudItem xs="12">
-                <MudPaper Class="case-header pa-5" Elevation="0" Outlined="true" UserAttributes='@Attrs("case-header")'>
+                <MudPaper Class="case-header pa-5" Elevation="0" Outlined="true" data-testid="case-header">
                     <div class="case-header__main">
                         <div>
                             <MudText Typo="Typo.overline" Color="Color.Primary">Case # @_case.CaseNumber</MudText>
@@ -53,7 +53,7 @@
             </MudItem>
 
             <MudItem xs="12" lg="8">
-                <MudTabs Rounded="true" Border="true" Elevation="0" Class="workbench-tabs" UserAttributes='@Attrs("workbench-tabs")'>
+                <MudTabs Rounded="true" Border="true" Elevation="0" Class="workbench-tabs" data-testid="workbench-tabs">
                     <MudTabPanel ID=@("tab-overview") PanelClass="pt-4">
                         <TabContent><span @attributes='Attrs("tab-overview")'>Overview</span></TabContent>
                         <ChildContent>
@@ -181,7 +181,7 @@
                     <div class="alert-stack">
                         @foreach (var alert in _case.Alerts)
                         {
-                            <MudAlert Severity="@MapSeverity(alert.Severity)" Variant="Variant.Outlined" Dense="true" UserAttributes='@Attrs("oob-alert", "data-field", alert.Field)'>
+                            <MudAlert Severity="@MapSeverity(alert.Severity)" Variant="Variant.Outlined" Dense="true" data-testid="oob-alert" data-field="@alert.Field">
                                 <strong>@alert.Field:</strong> @alert.Message
                             </MudAlert>
                         }
@@ -194,17 +194,17 @@
     private RenderFragment RequirementsTab() => @<MudPaper Class="pa-4" Elevation="0" Outlined="true">
         <div class="section-toolbar">
             @SectionTitle("Requirements")
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => _showOrderForm = !_showOrderForm" UserAttributes='@Attrs("order-requirement")' aria-label="Order requirement">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => _showOrderForm = !_showOrderForm" data-testid="order-requirement" aria-label="Order requirement">
                 Order requirement
             </MudButton>
         </div>
 
         @if (_showOrderForm)
         {
-            <MudPaper Class="order-dialog pa-4 my-4" Elevation="0" Outlined="true" role="dialog" aria-label="Order requirement form" UserAttributes='@Attrs("order-requirement-dialog")'>
+            <MudPaper Class="order-dialog pa-4 my-4" Elevation="0" Outlined="true" role="dialog" aria-label="Order requirement form" data-testid="order-requirement-dialog">
                 <MudGrid Spacing="2" Class="align-center-grid">
                     <MudItem xs="12" sm="7">
-                        <MudSelect T="RequirementType" Label="Requirement type" @bind-Value="_orderType" Dense="true" UserAttributes='@Attrs("order-requirement-type")' aria-label="Requirement type">
+                        <MudSelect T="RequirementType" Label="Requirement type" @bind-Value="_orderType" Dense="true" data-testid="order-requirement-type" aria-label="Requirement type">
                             @foreach (var type in Enum.GetValues<RequirementType>())
                             {
                                 <MudSelectItem T="RequirementType" Value="@type">@Friendly(type)</MudSelectItem>
@@ -212,7 +212,7 @@
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="12" sm="5">
-                        <MudButton FullWidth="true" Variant="Variant.Filled" Color="Color.Secondary" Disabled="_isOrdering" OnClick="OrderRequirementAsync" UserAttributes='@Attrs("order-requirement-submit")' aria-label="Confirm order requirement">
+                        <MudButton FullWidth="true" Variant="Variant.Filled" Color="Color.Secondary" Disabled="_isOrdering" OnClick="OrderRequirementAsync" data-testid="order-requirement-submit" aria-label="Confirm order requirement">
                             @if (_isOrdering) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
                             Confirm order
                         </MudButton>
@@ -287,10 +287,10 @@
         @SectionTitle("Notes & history")
         <MudGrid Spacing="2" Class="mb-4">
             <MudItem xs="12" md="9">
-                <MudTextField T="string" Label="Add note" @bind-Value="_newNote" Lines="3" Variant="Variant.Outlined" UserAttributes='@Attrs("note-input")' aria-label="Note text" />
+                <MudTextField T="string" Label="Add note" @bind-Value="_newNote" Lines="3" Variant="Variant.Outlined" data-testid="note-input" aria-label="Note text" />
             </MudItem>
             <MudItem xs="12" md="3" Class="d-flex align-end">
-                <MudButton FullWidth="true" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_isAddingNote || string.IsNullOrWhiteSpace(_newNote))" OnClick="AddNoteAsync" UserAttributes='@Attrs("note-add")' aria-label="Add note">
+                <MudButton FullWidth="true" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_isAddingNote || string.IsNullOrWhiteSpace(_newNote))" OnClick="AddNoteAsync" data-testid="note-add" aria-label="Add note">
                     Add note
                 </MudButton>
             </MudItem>
@@ -298,7 +298,7 @@
         <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
             @foreach (var note in _notes.OrderByDescending(n => n.CreatedAt))
             {
-                <MudTimelineItem Color="Color.Primary" UserAttributes='@Attrs("note-item")'>
+                <MudTimelineItem Color="Color.Primary" data-testid="note-item">
                     <MudText Typo="Typo.subtitle2">@note.Author · @note.Kind</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">@note.CreatedAt.LocalDateTime.ToString("MMM d, yyyy h:mm tt", CultureInfo.InvariantCulture)</MudText>
                     <MudText Typo="Typo.body2" Class="mt-1">@note.Text</MudText>
@@ -307,10 +307,10 @@
         </MudTimeline>
     </MudPaper>;
 
-    private RenderFragment SummaryCard() => @<MudPaper Class="pa-4" Elevation="0" Outlined="true" UserAttributes='@Attrs("ai-summary")'>
+    private RenderFragment SummaryCard() => @<MudPaper Class="pa-4" Elevation="0" Outlined="true" data-testid="ai-summary">
         @SectionTitle("Case summary (mock co-pilot)")
         <MudText Typo="Typo.caption" Color="Color.Secondary">Template-generated from deterministic case, requirement, and risk data. No LLM call is made.</MudText>
-        <MudText Typo="Typo.body1" Class="mt-3" UserAttributes='@Attrs("ai-summary-text")'>@(_summary?.Summary ?? "Summary is unavailable for this case.")</MudText>
+        <MudText Typo="Typo.body1" Class="mt-3" data-testid="ai-summary-text">@(_summary?.Summary ?? "Summary is unavailable for this case.")</MudText>
         @if (_summary?.Highlights.Count > 0)
         {
             <ul class="summary-list">
@@ -322,27 +322,27 @@
         }
     </MudPaper>;
 
-    private RenderFragment DecisionPanel() => @<MudPaper Class="pa-4" Elevation="0" Outlined="true" UserAttributes='@Attrs("decision-panel")'>
+    private RenderFragment DecisionPanel() => @<MudPaper Class="pa-4" Elevation="0" Outlined="true" data-testid="decision-panel">
         @SectionTitle("Decision panel")
         @if (!string.IsNullOrWhiteSpace(_decisionError))
         {
-            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-3" UserAttributes='@Attrs("decision-error")'>@_decisionError</MudAlert>
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-3" data-testid="decision-error">@_decisionError</MudAlert>
         }
         @if (!string.IsNullOrWhiteSpace(_decisionSuccess))
         {
-            <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Class="mb-3" UserAttributes='@Attrs("decision-success")'>@_decisionSuccess</MudAlert>
+            <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Class="mb-3" data-testid="decision-success">@_decisionSuccess</MudAlert>
         }
         <MudStack Spacing="3">
-            <MudSelect T="RiskClass" Label="Risk class" @bind-Value="_decisionRiskClass" Variant="Variant.Outlined" UserAttributes='@Attrs("decision-risk-class")' aria-label="Decision risk class">
+            <MudSelect T="RiskClass" Label="Risk class" @bind-Value="_decisionRiskClass" Variant="Variant.Outlined" data-testid="decision-risk-class" aria-label="Decision risk class">
                 @foreach (var riskClass in Enum.GetValues<RiskClass>())
                 {
                     <MudSelectItem T="RiskClass" Value="@riskClass">@Friendly(riskClass)</MudSelectItem>
                 }
             </MudSelect>
-            <MudTextField T="string" Label="Reason" @bind-Value="_decisionReason" Required="true" Variant="Variant.Outlined" UserAttributes='@Attrs("decision-reason")' aria-label="Decision reason" />
-            <MudTextField T="string" Label="Decision note" @bind-Value="_decisionNote" Lines="3" Variant="Variant.Outlined" UserAttributes='@Attrs("decision-note")' aria-label="Decision note" />
-            <MudCheckBox T="bool" Label="Override outstanding requirements" @bind-Value="_decisionOverride" Color="Color.Primary" UserAttributes='@Attrs("decision-override")' aria-label="Override outstanding requirements" />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_isSubmittingDecision || string.IsNullOrWhiteSpace(_decisionReason))" OnClick="SubmitDecisionAsync" UserAttributes='@Attrs("decision-submit")' aria-label="Submit underwriting decision">
+            <MudTextField T="string" Label="Reason" @bind-Value="_decisionReason" Immediate="true" Required="true" Variant="Variant.Outlined" data-testid="decision-reason" aria-label="Decision reason" />
+            <MudTextField T="string" Label="Decision note" @bind-Value="_decisionNote" Lines="3" Variant="Variant.Outlined" data-testid="decision-note" aria-label="Decision note" />
+            <MudCheckBox T="bool" Label="Override outstanding requirements" @bind-Value="_decisionOverride" Color="Color.Primary" data-testid="decision-override" aria-label="Override outstanding requirements" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_isSubmittingDecision || string.IsNullOrWhiteSpace(_decisionReason))" OnClick="SubmitDecisionAsync" data-testid="decision-submit" aria-label="Submit underwriting decision">
                 @if (_isSubmittingDecision) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
                 Submit decision
             </MudButton>
@@ -429,7 +429,6 @@
     }
 
     private static Dictionary<string, object> Attrs(string testId) => new() { ["data-testid"] = testId };
-    private static Dictionary<string, object> Attrs(string testId, string key, object value) => new() { ["data-testid"] = testId, [key] = value };
 
     private bool IsOutOfBounds(string field) => _case?.Alerts.Any(a => string.Equals(a.Field, field, StringComparison.OrdinalIgnoreCase)) == true;
 

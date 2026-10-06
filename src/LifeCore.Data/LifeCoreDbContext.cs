@@ -20,6 +20,16 @@ public sealed class LifeCoreDbContext(DbContextOptions<LifeCoreDbContext> option
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PolicyTransaction> PolicyTransactions => Set<PolicyTransaction>();
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        // SQLite cannot ORDER BY/compare DateTimeOffset natively; store as sortable binary ticks.
+        if (Database.IsSqlite())
+        {
+            configurationBuilder.Properties<DateTimeOffset>().HaveConversion<Microsoft.EntityFrameworkCore.Storage.ValueConversion.DateTimeOffsetToBinaryConverter>();
+            configurationBuilder.Properties<DateTimeOffset?>().HaveConversion<Microsoft.EntityFrameworkCore.Storage.ValueConversion.DateTimeOffsetToBinaryConverter>();
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<Party>().OwnsOne(p => p.Address);

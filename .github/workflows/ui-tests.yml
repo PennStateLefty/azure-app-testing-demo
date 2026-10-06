@@ -48,7 +48,7 @@ jobs:
         env:
           PLAYWRIGHT_SERVICE_URL: ${{ vars.PLAYWRIGHT_SERVICE_URL }}
           BASE_URL: ${{ inputs.base_url || vars.WEB_URL }}
-        run: dotnet test tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj --configuration Release --no-build --logger "trx;LogFileName=playwright-tests.trx" --results-directory TestResults/playwright -- NUnit.NumberOfTestWorkers=20
+        run: dotnet test tests/LifeCore.PlaywrightTests/LifeCore.PlaywrightTests.csproj --configuration Release --no-build --settings tests/LifeCore.PlaywrightTests/.runsettings --logger "trx;LogFileName=playwright-tests.trx" --results-directory TestResults/playwright -- NUnit.NumberOfTestWorkers=20
 
       - name: Upload Playwright test results
         if: always()

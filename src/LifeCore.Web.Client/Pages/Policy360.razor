@@ -120,7 +120,7 @@
                                 }
                             </div>
                             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mt-3 beneficiary-total-row">
-                                <MudText Typo="Typo.body2" data-testid="beneficiary-primary-total">Primary total: @Percent(PrimaryTotal) @(PrimaryTotal == 100 ? "" : "— must total 100%")</MudText>
+                                <MudText Typo="Typo.body2" data-testid="beneficiary-primary-total">Primary total: @Percent(PrimaryTotal / 100m) @(PrimaryTotal == 100 ? "" : "— must total 100%")</MudText>
                                 <MudStack Row="true" Spacing="1">
                                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="AddBeneficiary" data-testid="beneficiary-add-row" aria-label="Add beneficiary row">Add row</MudButton>
                                     <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="_submittingAction" data-testid="beneficiary-submit" aria-label="Submit beneficiary change">Submit beneficiaries</MudButton>
