@@ -1,7 +1,7 @@
 version: v0.1
 testId: lifecore-underwriter-journey
 displayName: LifeCore underwriter journey
-description: KPIs, task worklist pages 1-5, case detail, requirements, risk assessment, summary, notes, with 10% decisions and 5% requirement orders.
+description: KPIs, worklist paging, case workbench reads, decisions and requirement orders.
 testPlan: jmeter/underwriter-journey.jmx
 testType: JMX
 engineInstances: 1

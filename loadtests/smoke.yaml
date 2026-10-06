@@ -1,7 +1,7 @@
 version: v0.1
 testId: lifecore-smoke
 displayName: LifeCore smoke
-description: Runs one JMeter user through /health/ready, hot reads, case workbench reads/writes, and policy servicing reads/writes.
+description: One user through health, worklist, case workbench and policy servicing calls.
 testPlan: jmeter/smoke.jmx
 testType: JMX
 engineInstances: 1

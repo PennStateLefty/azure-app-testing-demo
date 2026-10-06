@@ -1,7 +1,7 @@
 version: v0.1
 testId: lifecore-csr-policy-servicing
 displayName: LifeCore CSR policy servicing
-description: Searches by policy prefix and owner last name, reads policy 360 tabs, with 5% address changes, 5% loan quotes, and 2% beneficiary updates.
+description: Policy search and Policy 360 reads with address, loan quote and beneficiary writes.
 testPlan: jmeter/csr-policy-servicing.jmx
 testType: JMX
 engineInstances: 1

@@ -1,7 +1,7 @@
 version: v0.1
 testId: lifecore-mixed-peak
 displayName: LifeCore mixed peak
-description: Two JMeter thread groups split total VUs 60/40. With two engines and threads=100, target load is approximately 200 concurrent users.
+description: Underwriter and CSR journeys split 60/40 across two engines for peak load.
 testPlan: jmeter/mixed-peak.jmx
 testType: JMX
 engineInstances: 2
