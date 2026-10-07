@@ -349,7 +349,7 @@
         </MudStack>
     </MudPaper>;
 
-    private RenderFragment SectionTitle(string text) => @<MudText Typo="Typo.h6" Class="section-title"><span aria-hidden="true">&gt;</span> @text</MudText>;
+    private RenderFragment SectionTitle(string text) => @<MudText Typo="Typo.h6" Class="section-title"><span class="lc-section-accent" aria-hidden="true"></span> @text</MudText>;
 
     private RenderFragment ApplicationFact(string label, string value, string field) => @<div class="app-fact @(IsOutOfBounds(field) ? "is-alert" : null)" data-field="@field">
         <span>@label</span>

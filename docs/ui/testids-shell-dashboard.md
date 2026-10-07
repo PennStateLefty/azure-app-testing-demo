@@ -6,13 +6,14 @@ These selectors are stable for Playwright. Prefer `getByTestId(...)`; use role l
 
 | Test ID | Region / element | Expected interaction |
 |---|---|---|
+| `brand-mark` | Decorative circular LC monogram | Assert text is `LC`; the enclosing LifeCore Suite dashboard link navigates to `/dashboard`. |
 | `global-search` | Top app bar search input | Fill and press `Enter`. `UW\d+` navigates to `/cases/{id}`; `LC\d+` navigates to `/policies/{id}`; any other text navigates to `/policies?query={text}`. |
 | `persona-switcher` | Wrapper around MudSelect persona picker | Click the wrapper/input, then choose a listbox option by visible text such as `Dana Whitfield (Underwriter)`. |
 | `env-badge` | Environment badge | Assert text is `DEMO`. |
 | `nav-dashboard` | Left navigation Dashboard link | Click to navigate to `/dashboard`; active state is purple. |
 | `nav-policies` | Left navigation Policies link | Click to navigate to `/policies`. |
-| `nav-product-config` | Disabled placeholder nav item | Assert disabled / not clickable. |
-| `footer-disclaimer` | Footer disclaimer | Assert it contains `not affiliated with or endorsed by Accenture` and `Synthetic data only`. |
+| `nav-product-config` | Left navigation Product Config link | Click to navigate to `/products`. |
+| `footer-disclaimer` | Footer disclaimer | Assert text is `Demo application. Synthetic data only.` |
 
 ## Dashboard KPI tiles
 
@@ -27,7 +28,15 @@ Each KPI tile has an outer test ID and an inner `[data-testid="kpi-value"]` for 
 | `kpi-sla-risk` | Cases at SLA risk |
 | `kpi-decisions-today` | Decisions today |
 | `dashboard-scope-all` | All cases toggle |
-| `dashboard-scope-my` | My cases toggle, enabled for underwriter personas only |
+| `dashboard-scope-my` | My cases toggle, enabled for underwriter personas only. Selected by default for underwriters; switching persona re-applies the default. |
+| `dashboard-scope-label` | Text describing the current scope, e.g. `Showing cases assigned to Dana Whitfield`. |
+
+## Product configuration (`/products`)
+
+| Test ID | Region / element | Expected interaction |
+|---|---|---|
+| `product-catalog` | Read-only product catalog table | Assert product names render. |
+| `product-row` | Code cell of each product row | Also has `data-product-code` (`TERM`, `UL`, `IUL`, `FIA`, `VA`). |
 
 ## Worklist queue
 

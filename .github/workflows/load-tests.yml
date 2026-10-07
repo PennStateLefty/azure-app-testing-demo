@@ -8,6 +8,16 @@ on:
         required: false
         type: string
         default: smoke
+      target_slot:
+        description: Optional App Service deployment slot to test (for example, staging). Empty targets production.
+        required: false
+        type: string
+        default: ''
+      base_url:
+        description: Optional base URL override. Defaults to the slot hostname or the WEB_URL repo variable.
+        required: false
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       test_profile:
@@ -20,6 +30,16 @@ on:
           - uw
           - csr
           - peak
+      target_slot:
+        description: Optional App Service deployment slot to test (for example, staging). Empty targets production.
+        required: false
+        type: string
+        default: ''
+      base_url:
+        description: Optional base URL override. Defaults to the slot hostname or the WEB_URL repo variable.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -27,7 +47,7 @@ permissions:
 
 jobs:
   load-tests:
-    name: Azure Load Testing (${{ inputs.test_profile || 'smoke' }})
+    name: Azure Load Testing (${{ inputs.test_profile || 'smoke' }}${{ inputs.target_slot && format(' @ {0}', inputs.target_slot) || '' }})
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -45,6 +65,11 @@ jobs:
         env:
           TEST_PROFILE: ${{ inputs.test_profile || 'smoke' }}
           WEB_URL: ${{ vars.WEB_URL }}
+          BASE_URL: ${{ inputs.base_url }}
+          TARGET_SLOT: ${{ inputs.target_slot }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          WEB_APP_NAME: ${{ vars.WEB_APP_NAME }}
         run: |
           set -euo pipefail
           case "$TEST_PROFILE" in
@@ -54,11 +79,17 @@ jobs:
             peak) config='loadtests/mixed-peak.yaml' ;;
             *) echo "Unknown test_profile: $TEST_PROFILE" >&2; exit 1 ;;
           esac
-          host="${WEB_URL#https://}"
+          target_url="$BASE_URL"
+          if [ -z "$target_url" ] && [ -n "$TARGET_SLOT" ]; then
+            target_url="https://$(az webapp show --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --name "$WEB_APP_NAME" --slot "$TARGET_SLOT" --query defaultHostName -o tsv)"
+          fi
+          target_url="${target_url:-$WEB_URL}"
+          host="${target_url#https://}"
           host="${host#http://}"
           host="${host%%/*}"
           echo "config=$config" >> "$GITHUB_OUTPUT"
           echo "host=$host" >> "$GITHUB_OUTPUT"
+          echo "Load test target: https://$host" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve server-side metric resources
         id: metric_resources
@@ -70,6 +101,7 @@ jobs:
           APP_SERVICE_PLAN_ID: ${{ vars.APP_SERVICE_PLAN_ID }}
           SQL_DATABASE_ID: ${{ vars.SQL_DATABASE_ID }}
           APP_INSIGHTS_ID: ${{ vars.APP_INSIGHTS_ID }}
+          TARGET_SLOT: ${{ inputs.target_slot }}
           HOST: ${{ steps.profile.outputs.host }}
         run: |
           set -euo pipefail
@@ -79,6 +111,9 @@ jobs:
           app_service_plan_id="${APP_SERVICE_PLAN_ID:-$(python3 -c 'import json,sys; print(json.load(sys.stdin)["serverFarmId"])' <<< "$web_json")}"
           sql_database_id="${SQL_DATABASE_ID:-$(az resource list --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --resource-type Microsoft.Sql/servers/databases --query "[?contains(name, '/master') == \`false\`] | [0].id" -o tsv)}"
           app_insights_id="${APP_INSIGHTS_ID:-$(az resource list --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --resource-type microsoft.insights/components --query "[0].id" -o tsv)}"
+          if [ -n "$TARGET_SLOT" ]; then
+            web_app_id="${web_app_id%/slots/*}/slots/$TARGET_SLOT"
+          fi
 
           {
             echo "web_app_id=$web_app_id"
@@ -95,6 +130,7 @@ jobs:
         id: prepared_config
         env:
           TEST_PROFILE: ${{ inputs.test_profile || 'smoke' }}
+          TARGET_SLOT: ${{ inputs.target_slot }}
           SOURCE_CONFIG: ${{ steps.profile.outputs.config }}
           WEB_APP_ID: ${{ steps.metric_resources.outputs.web_app_id }}
           WEB_APP_NAME: ${{ steps.metric_resources.outputs.web_app_name }}
@@ -106,10 +142,11 @@ jobs:
           APP_INSIGHTS_NAME: ${{ steps.metric_resources.outputs.app_insights_name }}
         run: |
           set -euo pipefail
-          prepared="loadtests/generated-${TEST_PROFILE}.yaml"
+          prepared="loadtests/generated-${TEST_PROFILE}${TARGET_SLOT:+-$TARGET_SLOT}.yaml"
           cp "$SOURCE_CONFIG" "$prepared"
           python3 - "$prepared" <<'PY'
           import os
+          import re
           import sys
 
           path = sys.argv[1]
@@ -126,6 +163,9 @@ jobs:
           text = open(path, encoding="utf-8").read()
           for placeholder, value in replacements.items():
               text = text.replace(placeholder, value)
+          if os.environ.get("TARGET_SLOT"):
+              # Slot metrics live under the slot resource type, not the parent site.
+              text = re.sub(r"(namespace:\s*)Microsoft\.Web/sites[ \t]*$", r"\1Microsoft.Web/sites/slots", text, flags=re.MULTILINE)
           open(path, "w", encoding="utf-8").write(text)
           PY
           echo "config=$prepared" >> "$GITHUB_OUTPUT"
@@ -146,6 +186,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: load-test-results-${{ inputs.test_profile || 'smoke' }}
+          name: load-test-results-${{ inputs.test_profile || 'smoke' }}${{ inputs.target_slot && format('-{0}', inputs.target_slot) || '' }}
           path: ${{ github.workspace }}/loadTest
           if-no-files-found: warn

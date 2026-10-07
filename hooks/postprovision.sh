@@ -24,6 +24,7 @@ GitHub repository variables to set:
   LOAD_TEST_RESOURCE_NAME=${LOAD_TEST_RESOURCE_NAME:-}
   PLAYWRIGHT_SERVICE_URL=${PLAYWRIGHT_SERVICE_URL:-}
   WEB_URL=${WEB_URL:-}
+  STAGING_WEB_URL=${STAGING_WEB_URL:-}
   DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-}
 VARS
 
@@ -37,6 +38,7 @@ if [ "${SET_GH_VARS:-false}" = "true" ]; then
     gh variable set LOAD_TEST_RESOURCE_NAME --body "${LOAD_TEST_RESOURCE_NAME:-}"
     gh variable set PLAYWRIGHT_SERVICE_URL --body "${PLAYWRIGHT_SERVICE_URL:-}"
     gh variable set WEB_URL --body "${WEB_URL:-}"
+    gh variable set STAGING_WEB_URL --body "${STAGING_WEB_URL:-}"
     gh variable set DEPLOYMENT_MODE --body "${DEPLOYMENT_MODE:-}"
   else
     echo "SET_GH_VARS=true was set, but gh is unavailable or not authenticated; skipping repo variable updates." >&2

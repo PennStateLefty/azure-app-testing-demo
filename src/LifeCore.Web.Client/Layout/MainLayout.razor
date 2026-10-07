@@ -11,7 +11,7 @@
 <MudLayout Class="lc-app-shell">
     <MudAppBar Elevation="0" Dense="false" Class="lc-appbar">
         <MudLink Href="/dashboard" Underline="Underline.None" Class="lc-brand" aria-label="LifeCore Suite dashboard">
-            <span class="lc-brand-mark" aria-hidden="true">&gt;</span>
+            <span class="lc-brand-mark" aria-hidden="true" data-testid="brand-mark">LC</span>
             <span class="lc-brand-text">LifeCore Suite</span>
             <span class="lc-tenant">Contoso Life &amp; Annuity</span>
         </MudLink>
@@ -33,7 +33,7 @@
             <MudNavMenu Dense="true" Class="lc-nav-menu">
                 <MudNavLink Href="/dashboard" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Dashboard" data-testid="nav-dashboard">Dashboard</MudNavLink>
                 <MudNavLink Href="/policies" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Policy" data-testid="nav-policies">Policies</MudNavLink>
-                <MudNavLink Disabled="true" Icon="@Icons.Material.Filled.SettingsApplications" data-testid="nav-product-config">Product Config</MudNavLink>
+                <MudNavLink Href="/products" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SettingsApplications" data-testid="nav-product-config">Product Config</MudNavLink>
             </MudNavMenu>
         </nav>
     </MudDrawer>
@@ -43,7 +43,7 @@
             @Body
         </main>
         <footer class="lc-footer" data-testid="footer-disclaimer">
-            Demo application – not affiliated with or endorsed by Accenture. Synthetic data only.
+            Demo application. Synthetic data only.
         </footer>
     </MudMainContent>
 </MudLayout>

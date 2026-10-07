@@ -113,7 +113,7 @@ Use the matching YAML/test IDs for the other profiles: `lifecore-underwriter-jou
 
 ## GitHub Actions
 
-The planned `load-tests.yml` workflow should accept a `profile` input and map it to a YAML file:
+`.github/workflows/load-tests.yml` is a reusable and manual workflow. Its `test_profile` input maps to a YAML file:
 
 | Input | YAML |
 | --- | --- |
@@ -122,7 +122,17 @@ The planned `load-tests.yml` workflow should accept a `profile` input and map it
 | `csr` | `loadtests/csr-policy-servicing.yaml` |
 | `peak` | `loadtests/mixed-peak.yaml` |
 
-The workflow can use `azure/load-testing` or `az load test create` / `az load test-run create`. Override YAML placeholders through the action/CLI `env` input: `host`, `protocol`, `port`, `threads`, `rampup`, `duration`, and `thinkScale`.
+Optional inputs:
+
+- `target_slot` (for example, `staging`) points the test at an App Service deployment slot and collects App Service metrics from the slot resource (`Microsoft.Web/sites/slots`).
+- `base_url` overrides the target host.
+
+The host is passed to JMeter through the action's `env` input. Each run uploads a `load-test-results-<profile>[-<slot>]` artifact.
+
+Where load tests run:
+
+- **Stage gate:** add the `stage` label to a PR. `ci.yml` deploys it to the `staging` slot and runs all four profiles in sequence. Any profile that breaches its `failureCriteria` fails the `Stage gate` check, which blocks promotion. See [deployment.md](deployment.md#stage-gate-and-promotion).
+- **After promotion:** `deploy-app.yml` runs the `smoke` profile against production after the slot swap.
 
 ## Before/after performance demo story
 

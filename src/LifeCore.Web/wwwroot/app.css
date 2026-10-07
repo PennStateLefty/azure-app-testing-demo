@@ -77,14 +77,22 @@ a { color: var(--lc-purple-dark); }
     min-width: 360px;
 }
 
-.lc-brand-mark,
-.lc-chevron {
-    color: var(--lc-purple);
-    font-weight: 800;
+.lc-brand-mark {
+    align-items: center;
+    background: var(--lc-purple-deep);
+    border: 2px solid var(--lc-purple);
+    border-radius: 50%;
+    color: var(--lc-white);
+    display: inline-flex;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    height: 36px;
+    justify-content: center;
     line-height: 1;
+    width: 36px;
 }
 
-.lc-brand-mark { font-size: 2rem; }
 .lc-brand-text { font-size: 1.18rem; font-weight: 800; letter-spacing: -0.02em; }
 .lc-tenant { border-left: 1px solid #3b3b3b; color: #cfcfcf; font-size: 0.82rem; padding-left: 12px; }
 
@@ -100,7 +108,14 @@ a { color: var(--lc-purple-dark); }
 }
 
 .lc-global-search input,
-.lc-persona-select input { color: var(--lc-white) !important; }
+.lc-persona-select input,
+.lc-persona-select .mud-input-slot,
+.lc-persona-select .mud-select-input,
+.lc-persona-select .mud-input-adornment,
+.lc-persona-select .mud-input-adornment .mud-icon-root,
+.lc-global-search .mud-input-adornment .mud-icon-root { color: var(--lc-white) !important; }
+.lc-global-search .mud-input-outlined-border,
+.lc-persona-select .mud-input-outlined-border { border-color: #5a5a5a !important; }
 .lc-persona-wrap { margin-right: 14px; min-width: 244px; }
 .lc-env-badge { font-weight: 800; letter-spacing: 0.08em; }
 
@@ -130,7 +145,17 @@ a { color: var(--lc-purple-dark); }
 .lc-page-eyebrow { color: var(--lc-purple-dark); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 .lc-muted { color: var(--lc-text-secondary); }
 .lc-section-title { align-items: flex-start; display: flex; gap: 10px; margin-bottom: 14px; }
-.lc-section-title .lc-chevron { font-size: 1.25rem; margin-top: 1px; }
+.lc-section-accent {
+    background: var(--lc-purple);
+    border-radius: var(--lc-radius);
+    display: inline-block;
+    flex-shrink: 0;
+    height: 20px;
+    margin-top: 4px;
+    width: 4px;
+}
+
+.section-title .lc-section-accent { margin-right: 6px; vertical-align: text-bottom; }
 
 .lc-card,
 .lc-kpi-card {

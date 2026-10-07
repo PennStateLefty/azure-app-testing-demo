@@ -56,4 +56,36 @@ test.describe('Dashboard', () => {
     await page.getByRole('option', { name: 'Dana Whitfield (Underwriter)', exact: true }).click();
     await expect(switcher).toContainText('Dana Whitfield');
   });
+
+  test('persona switcher text is readable when closed', async ({ page }) => {
+    await goTo(page, '/dashboard', 'worklist-grid');
+    const selected = page.getByTestId('persona-switcher').locator('.mud-input-slot, .mud-select-input').first();
+    await expect(selected).toHaveCSS('color', 'rgb(255, 255, 255)');
+  });
+
+  test('switching persona re-scopes KPIs and worklist', async ({ page }) => {
+    await goTo(page, '/dashboard', 'worklist-grid');
+    const openCases = page.getByTestId('kpi-open-cases').getByTestId('kpi-value');
+    await expect(page.getByTestId('dashboard-scope-label')).toContainText('Dana Whitfield');
+    await expect(openCases).not.toHaveText('—');
+    const danaCount = await openCases.innerText();
+
+    await page.getByTestId('persona-switcher').click();
+    await page.getByRole('option', { name: 'Jordan Blake (CSR)', exact: true }).click();
+    await expect(page.getByTestId('dashboard-scope-label')).toContainText('all underwriters');
+    await expect(openCases).not.toHaveText(danaCount);
+
+    await page.getByTestId('persona-switcher').click();
+    await page.getByRole('option', { name: 'Marcus Lee (Underwriter)', exact: true }).click();
+    await expect(page.getByTestId('dashboard-scope-label')).toContainText('Marcus Lee');
+    await expect(page.locator('[data-testid="worklist-grid"] tbody')).not.toContainText('Dana Whitfield');
+  });
+
+  test('product config page lists catalog', async ({ page }) => {
+    await goTo(page, '/dashboard', 'worklist-grid');
+    await page.getByTestId('nav-product-config').click();
+    await expect(page).toHaveURL(urlRegex('/products'));
+    await expect(page.getByTestId('product-row')).toHaveCount(5);
+    await expect(page.getByTestId('product-catalog')).toContainText('Universal Life');
+  });
 });

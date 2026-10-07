@@ -32,6 +32,8 @@ var repoOwnerName = githubOidcRepoClaim
 var mainSubject = 'repo:${repoOwnerName}:ref:refs/heads/${branch}'
 var environmentSubject = 'repo:${repoOwnerName}:environment:${githubEnvironment}'
 var pullRequestSubject = 'repo:${repoOwnerName}:pull_request'
+var stageEnvironmentName = 'stage'
+var stageEnvironmentSubject = 'repo:${repoOwnerName}:environment:${stageEnvironmentName}'
 var oidcIssuer = 'https://token.actions.githubusercontent.com'
 var oidcAudience = 'api://AzureADTokenExchange'
 
@@ -127,6 +129,22 @@ resource githubPullRequestFederation 'Microsoft.ManagedIdentity/userAssignedIden
   }
 }
 
+// CI deploys "stage"-labelled pull requests to the staging slot through the "stage" GitHub environment.
+resource githubStageEnvironmentFederation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = if (githubEnvironment != stageEnvironmentName) {
+  parent: githubIdentity
+  name: 'github-environment-${stageEnvironmentName}'
+  dependsOn: [
+    githubPullRequestFederation
+  ]
+  properties: {
+    issuer: oidcIssuer
+    subject: stageEnvironmentSubject
+    audiences: [
+      oidcAudience
+    ]
+  }
+}
+
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: 'vnet-lifecore-${nameSuffix}'
   location: location
@@ -176,6 +194,64 @@ resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   }
 }
 
+var webSiteConfig = {
+  linuxFxVersion: 'DOTNETCORE|10.0'
+  appCommandLine: 'dotnet LifeCore.Web.dll'
+  alwaysOn: true
+  ftpsState: 'Disabled'
+  minTlsVersion: '1.2'
+  healthCheckPath: '/health/ready'
+  appSettings: [
+    {
+      name: 'Database__Provider'
+      value: 'SqlServer'
+    }
+    {
+      name: 'AZURE_CLIENT_ID'
+      value: appIdentity.properties.clientId
+    }
+    {
+      name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+      value: appInsights.properties.ConnectionString
+    }
+    {
+      name: 'Perf__UseOptimizedQueries'
+      value: string(useOptimizedQueries)
+    }
+    {
+      name: 'Admin__EnableReset'
+      value: 'true'
+    }
+    {
+      name: 'Seed__OnStartup'
+      value: 'true'
+    }
+    {
+      name: 'ASPNETCORE_ENVIRONMENT'
+      value: 'Production'
+    }
+    {
+      name: 'WEBSITE_HEALTHCHECK_MAXPINGFAILURES'
+      value: '5'
+    }
+    {
+      name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+      value: deploymentMode == 'appServiceBuild' ? 'true' : 'false'
+    }
+    {
+      name: 'PROJECT'
+      value: 'src/LifeCore.Web/LifeCore.Web.csproj'
+    }
+  ]
+  connectionStrings: [
+    {
+      name: 'LifeCore'
+      connectionString: 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Database=${sqlDatabaseName};Authentication=Active Directory Managed Identity;User Id=${appIdentity.properties.clientId};Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;'
+      type: 'SQLAzure'
+    }
+  ]
+}
+
 resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   name: webAppName
   location: location
@@ -195,63 +271,48 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
     virtualNetworkSubnetId: vnet.properties.subnets[0].id
     vnetRouteAllEnabled: true
     clientAffinityEnabled: false
-    siteConfig: {
-      linuxFxVersion: 'DOTNETCORE|10.0'
-      appCommandLine: 'dotnet LifeCore.Web.dll'
-      alwaysOn: true
-      ftpsState: 'Disabled'
-      minTlsVersion: '1.2'
-      healthCheckPath: '/health/ready'
-      appSettings: [
-        {
-          name: 'Database__Provider'
-          value: 'SqlServer'
-        }
-        {
-          name: 'AZURE_CLIENT_ID'
-          value: appIdentity.properties.clientId
-        }
-        {
-          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-          value: appInsights.properties.ConnectionString
-        }
-        {
-          name: 'Perf__UseOptimizedQueries'
-          value: string(useOptimizedQueries)
-        }
-        {
-          name: 'Admin__EnableReset'
-          value: 'true'
-        }
-        {
-          name: 'Seed__OnStartup'
-          value: 'true'
-        }
-        {
-          name: 'ASPNETCORE_ENVIRONMENT'
-          value: 'Production'
-        }
-        {
-          name: 'WEBSITE_HEALTHCHECK_MAXPINGFAILURES'
-          value: '5'
-        }
-        {
-          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
-          value: deploymentMode == 'appServiceBuild' ? 'true' : 'false'
-        }
-        {
-          name: 'PROJECT'
-          value: 'src/LifeCore.Web/LifeCore.Web.csproj'
-        }
-      ]
-      connectionStrings: [
-        {
-          name: 'LifeCore'
-          connectionString: 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Database=${sqlDatabaseName};Authentication=Active Directory Managed Identity;User Id=${appIdentity.properties.clientId};Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;'
-          type: 'SQLAzure'
-        }
-      ]
+    siteConfig: webSiteConfig
+  }
+}
+
+// Production-like "stage" slot. CI deploys labelled PRs here and runs the full UI/load suite
+// as a promotion gate; merges to main promote it with a slot swap. It shares the production
+// plan, identity, VNet integration and database, so test traffic hits shared demo data.
+resource stagingSlot 'Microsoft.Web/sites/slots@2023-12-01' = {
+  parent: webApp
+  name: 'staging'
+  location: location
+  tags: tags
+  kind: 'app,linux'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${appIdentity.id}': {}
     }
+  }
+  properties: {
+    serverFarmId: plan.id
+    httpsOnly: true
+    virtualNetworkSubnetId: vnet.properties.subnets[0].id
+    vnetRouteAllEnabled: true
+    clientAffinityEnabled: false
+    siteConfig: webSiteConfig
+  }
+}
+
+resource stagingFtpPublishingCredentials 'Microsoft.Web/sites/slots/basicPublishingCredentialsPolicies@2023-12-01' = {
+  parent: stagingSlot
+  name: 'ftp'
+  properties: {
+    allow: false
+  }
+}
+
+resource stagingScmPublishingCredentials 'Microsoft.Web/sites/slots/basicPublishingCredentialsPolicies@2023-12-01' = {
+  parent: stagingSlot
+  name: 'scm'
+  properties: {
+    allow: deploymentMode == 'appServiceBuild'
   }
 }
 
@@ -517,6 +578,8 @@ output LOAD_TEST_PRINCIPAL_ID string = loadTest.identity.principalId
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = appInsights.properties.ConnectionString
 output APP_SERVICE_PLAN_ID string = plan.id
 output WEB_APP_ID string = webApp.id
+output STAGING_WEB_URL string = 'https://${stagingSlot.properties.defaultHostName}'
+output STAGING_SLOT_ID string = stagingSlot.id
 output SQL_DATABASE_ID string = sqlDb.id
 output APP_INSIGHTS_ID string = appInsights.id
 output SQL_ADMIN_IS_APP_IDENTITY bool = sqlAdminIsAppIdentity

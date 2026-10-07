@@ -51,6 +51,7 @@ public static class LifeCoreEndpoints
         app.MapPut(ApiRoutes.PolicyAddress, ChangeAddress);
         app.MapPut(ApiRoutes.PolicyBeneficiaries, UpdateBeneficiaries);
         app.MapPost(ApiRoutes.PolicyQuote, Quote);
+        app.MapGet(ApiRoutes.Products, GetProducts);
         return app;
     }
 
@@ -63,6 +64,20 @@ public static class LifeCoreEndpoints
             return Results.Ok(result);
         });
         return app;
+    }
+
+    private static async Task<IResult> GetProducts(LifeCoreDbContext db, CancellationToken ct)
+    {
+        var products = await db.Products.AsNoTracking().OrderBy(p => p.Line).ThenBy(p => p.Name).ToListAsync(ct);
+        var openCases = await db.Cases.AsNoTracking()
+            .Where(c => c.Status != CaseStatus.Decisioned && c.Status != CaseStatus.Withdrawn)
+            .GroupBy(c => c.ProductCode).Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+        var inForce = await db.Policies.AsNoTracking()
+            .Where(p => p.Status == PolicyStatus.InForce)
+            .GroupBy(p => p.ProductCode).Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+        return Results.Ok(products.Select(p => new ProductDto(p.Code, p.Name, p.Line, p.Type, openCases.GetValueOrDefault(p.Code), inForce.GetValueOrDefault(p.Code))).ToList());
     }
 
     private static async Task<IResult> GetKpis(string? underwriter, LifeCoreDbContext db, IMemoryCache cache, IOptionsMonitor<PerfOptions> perf, CancellationToken ct)

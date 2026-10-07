@@ -66,16 +66,17 @@ Accenture hasn't published screenshots that can be reproduced. The descriptions 
 ### 2.3 Branding
 
 - **[DECIDED]** Use the fictional product name **"LifeCore Suite"** and the fictional carrier/tenant **"Contoso Life & Annuity"**.
-- Show a footer disclaimer: *"Demo application – not affiliated with or endorsed by Accenture. Synthetic data only."*
+- Show a footer disclaimer: *"Demo application. Synthetic data only."*
+- Keep all in-app text vendor-neutral, with no Accenture references.
 - Refer to "ALIP" only in docs, never as an in-app brand.
 - Do not use the Accenture logo or wordmark.
 
 #### Design language
 
-Because research found no distinct, publicly documented ALIP design system, the demo adopts Accenture's public design language rather than inventing a separate ALIP-specific style. Brand-color and typography references are grounded in Accenture public brand materials (2020 rebrand).
+The demo retains its existing purple palette and enterprise layout, but uses fictional LifeCore branding rather than a vendor logo or wordmark.
 
 - **Palette:** Core Purple `#A100FF` for primary actions, accents, and active states; Black `#000000` for the top app bar and headings; White for surfaces; Dark Purple `#7500C0` for hover and secondary states; Deep Purple `#460073` for tertiary accents and chart series; light neutral `#F2F2F2` for page backgrounds; `#E6E6E6` for borders and dividers.
-- **Style:** flat, high-contrast enterprise UI with generous whitespace, small border radius, restrained card shadows, dense but readable data grids, and the `>` chevron as a subtle navigation and emphasis motif.
+- **Style:** flat, high-contrast enterprise UI with generous whitespace, small border radius, restrained card shadows, and dense but readable data grids. Use a circular **LC** monogram in the app bar and vertical accent bars on section headings; do not use a `>` brand motif.
 - **Typography:** font stack `"Graphik", "Inter", Arial, sans-serif`. Graphik is Accenture's brand typeface and requires a commercial license from Commercial Type, so it is **not bundled**. Inter is self-hosted under the SIL Open Font License as the fallback.
 
 ---
@@ -148,7 +149,7 @@ Because research found no distinct, publicly documented ALIP design system, the 
 | Concern | **[DECIDED]** Recommendation | Rationale |
 |---|---|---|
 | Runtime | **.NET 10 (LTS)**, C# 14 | Latest GA (10.0.x, Sept 2026). .NET 11 isn't GA until Nov 2026. |
-| Front end | **Blazor WebAssembly** client (in a Blazor Web App with **InteractiveWebAssembly** render mode). Component library: **MudBlazor** with a custom Accenture-palette theme. | All UI → back end traffic is **plain HTTP/JSON**, which JMeter can replay. Blazor **Server** routes UI events over a SignalR WebSocket, which JMeter can't realistically load test. |
+| Front end | **Blazor WebAssembly** client (in a Blazor Web App with **InteractiveWebAssembly** render mode). Component library: **MudBlazor** with a custom LifeCore theme. | All UI → back end traffic is **plain HTTP/JSON**, which JMeter can replay. Blazor **Server** routes UI events over a SignalR WebSocket, which JMeter can't realistically load test. |
 | Back end | **ASP.NET Core Minimal APIs** under `/api/v1/*`, with OpenAPI (built-in `Microsoft.AspNetCore.OpenApi`) and a Scalar or Swagger UI | A REST surface that load tests can target directly, mirroring ALIP's REST/JSON gateway and Swagger docs. |
 | Hosting model | **One deployable**: the ASP.NET Core host serves the WASM static assets *and* the API. The client and the API are separate projects. | Meets the "same binary is fine" requirement while keeping a clean API boundary for load tests. |
 | Data | **EF Core 10**. **Azure SQL Database serverless** in Azure with Entra-only authentication through a user-assigned managed identity; **SQLite** locally. Schema is created with `EnsureCreated` for both providers, and seed data is deterministic at startup. | Gives realistic DB latency under load. Seeding makes test data predictable. Two providers keep local development lightweight without changing API behavior. |
@@ -321,8 +322,8 @@ azure.yaml                     azd project for provisioning only
 | Question | Decision |
 |---|---|
 | Screen 3 | **Policy 360** is selected; Product Configuration Workbench remains a documented alternative but is not part of v1. |
-| Visual design / branding | Adopt Accenture's public design language and palette because no distinct public ALIP design system was found; do not use Accenture logos or wordmarks. |
-| Component library | **MudBlazor** with a custom Accenture-palette theme. |
+| Visual design / branding | Use fictional, vendor-neutral LifeCore branding with a circular LC monogram, vertical section accents, and the existing purple palette. |
+| Component library | **MudBlazor** with a custom LifeCore theme. |
 | Playwright language | **TypeScript** with `@playwright/test`, `@azure/playwright`, Azure Playwright reporter, and Entra authentication. |
 | Hosting | **App Service Linux P1v3** with `DOTNETCORE\|10.0`. |
 | Deployment method | Primary: App Service continuous deployment with the GitHub Actions build provider and `azure/webapps-deploy` through OIDC. Fallback: App Service Build Service (Kudu/Oryx). `azd` provisions only. |

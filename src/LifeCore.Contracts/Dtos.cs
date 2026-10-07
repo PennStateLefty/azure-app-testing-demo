@@ -2,6 +2,16 @@ namespace LifeCore.Contracts;
 
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount);
 
+// ---------- Product configuration (read-only) ----------
+
+public sealed record ProductDto(
+    string Code,
+    string Name,
+    ProductLine Line,
+    ProductType Type,
+    int OpenCases,
+    int InForcePolicies);
+
 // ---------- Screen 1: Underwriting Case Dashboard ----------
 
 public sealed record DashboardKpisDto(

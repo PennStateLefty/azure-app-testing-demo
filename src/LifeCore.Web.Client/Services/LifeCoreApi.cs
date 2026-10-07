@@ -92,6 +92,10 @@ public sealed class LifeCoreApi(HttpClient http, PersonaState persona)
     public Task<ApiResult<QuoteResultDto>> QuoteAsync(string policyNumber, QuoteRequest request, CancellationToken ct = default) =>
         SendAsync<QuoteResultDto>(HttpMethod.Post, ApiRoutes.For(ApiRoutes.PolicyQuote, policyNumber), request, ct);
 
+    // ----- Product configuration -----
+    public Task<IReadOnlyList<ProductDto>?> GetProductsAsync(CancellationToken ct = default) =>
+        GetAsync<IReadOnlyList<ProductDto>>(ApiRoutes.Products, ct);
+
     // ----- helpers -----
     private async Task<T?> GetAsync<T>(string url, CancellationToken ct)
     {

@@ -1,0 +1,63 @@
+@page "/products"
+@inject LifeCoreApi Api
+
+<PageTitle>Product Configuration - LifeCore Suite</PageTitle>
+
+<div class="lc-page-header">
+    <div>
+        <MudText Typo="Typo.overline" Class="lc-page-eyebrow">Product configuration</MudText>
+        <MudText Typo="Typo.h1" HtmlTag="h1">Product catalog</MudText>
+        <MudText Typo="Typo.body1" Class="lc-muted">Read-only view of configured life and annuity products with current business volume.</MudText>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4">@_error</MudAlert>
+}
+
+<MudPaper Class="lc-card" Elevation="0" data-testid="product-catalog">
+    <MudTable T="ProductDto" Items="_products" Loading="_loading" Dense="true" Hover="true" Elevation="0" aria-label="Product catalog">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Product</MudTh>
+            <MudTh>Line</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh Style="text-align:right">Open UW cases</MudTh>
+            <MudTh Style="text-align:right">In-force policies</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code" data-testid="product-row" data-product-code="@context.Code"><strong>@context.Code</strong></MudTd>
+            <MudTd DataLabel="Product">@context.Name</MudTd>
+            <MudTd DataLabel="Line">@context.Line</MudTd>
+            <MudTd DataLabel="Type">@DisplayFormat.EnumLabel(context.Type)</MudTd>
+            <MudTd DataLabel="Open UW cases" Style="text-align:right">@context.OpenCases.ToString("N0")</MudTd>
+            <MudTd DataLabel="In-force policies" Style="text-align:right">@context.InForcePolicies.ToString("N0")</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="pa-4">No products are configured.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<ProductDto> _products = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _products = await Api.GetProductsAsync() ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load products: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

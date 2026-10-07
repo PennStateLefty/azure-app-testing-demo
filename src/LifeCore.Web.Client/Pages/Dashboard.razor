@@ -12,6 +12,7 @@
         <MudText Typo="Typo.overline" Class="lc-page-eyebrow">Underwriting</MudText>
         <MudText Typo="Typo.h1" HtmlTag="h1">Case Dashboard</MudText>
         <MudText Typo="Typo.body1" Class="lc-muted">Workload metrics, task queue, and peer guidance for new business underwriting.</MudText>
+        <MudText Typo="Typo.body2" Class="lc-muted" data-testid="dashboard-scope-label">@(UnderwriterFilter is null ? "Showing all underwriters' cases" : $"Showing cases assigned to {UnderwriterFilter}")</MudText>
     </div>
     <MudToggleGroup T="bool" Value="_myCasesOnly" ValueChanged="SetScope" SelectionMode="SelectionMode.SingleSelection" Color="Color.Primary" Outlined="true" CheckMark="false" aria-label="Dashboard case scope">
         <MudToggleItem T="bool" Value="false" Text="All cases" data-testid="dashboard-scope-all" />
@@ -241,12 +242,16 @@
     protected override async Task OnInitializedAsync()
     {
         PersonaState.Changed += OnPersonaChanged;
+        _myCasesOnly = IsUnderwriter;
         await LoadKpis();
     }
 
+    // Underwriters default to their own book so switching persona visibly re-scopes the dashboard.
     private async void OnPersonaChanged()
     {
-        if (!IsUnderwriter) _myCasesOnly = false;
+        _myCasesOnly = IsUnderwriter;
+        _selectedCase = null;
+        _summaryOpen = false;
         await LoadKpis();
         await ReloadWorklist();
     }

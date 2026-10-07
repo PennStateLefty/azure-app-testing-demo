@@ -54,11 +54,6 @@
     margin-bottom: 1rem;
 }
 
-.section-title span {
-    color: var(--mud-palette-primary);
-    font-weight: 900;
-}
-
 .app-data-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

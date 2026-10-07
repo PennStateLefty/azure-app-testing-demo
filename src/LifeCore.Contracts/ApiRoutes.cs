@@ -29,6 +29,9 @@ public static class ApiRoutes
     public const string PolicyAddress = Base + "/policies/{policyNumber}/address";        // PUT
     public const string PolicyQuote = Base + "/policies/{policyNumber}/quotes";           // POST QuoteRequest
 
+    // Product configuration (read-only catalog)
+    public const string Products = Base + "/products";
+
     // Misc
     public const string Personas = Base + "/personas";
     public const string AdminReset = Base + "/admin/reset";

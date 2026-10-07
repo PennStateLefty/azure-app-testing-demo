@@ -8,9 +8,10 @@ Provisioned resources:
 
 - Log Analytics workspace and workspace-based Application Insights.
 - App user-assigned managed identity (`id-app-*`) for Azure SQL access.
-- GitHub Actions user-assigned managed identity (`id-github-*`) with OIDC federated credentials for `main`, the `demo` GitHub environment, and pull requests. Subjects use the repo's immutable-ID claim format (`repo:PennStateLefty@37122175/azure-app-testing-demo@1407755409:...`), set by the `githubOidcRepoClaim` parameter.
+- GitHub Actions user-assigned managed identity (`id-github-*`) with OIDC federated credentials for `main`, the `demo` and `stage` GitHub environments, and pull requests. Subjects use the repo's immutable-ID claim format (`repo:PennStateLefty@37122175/azure-app-testing-demo@1407755409:...`), set by the `githubOidcRepoClaim` parameter.
 - Linux App Service plan P1v3, default capacity 2, with autoscale rules (CPU > 70% scale out, CPU < 30% scale in, min 2/max 5).
 - Linux Web App with HTTPS only, Always On, `/health/ready`, disabled FTP publishing, .NET 10 runtime, startup command `dotnet LifeCore.Web.dll` (the publish output has two `.runtimeconfig.json` files), Application Insights, and SQL managed identity connection string.
+- A `staging` deployment slot on the same plan with identical config (identity, VNet integration, app settings, connection string). It is the production-like **stage** environment that the CI stage gate deploys to, and merges to `main` promote it with a slot swap. Output `STAGING_WEB_URL`.
 - Virtual network with an App Service-delegated subnet (`snet-app`) and a private-endpoint subnet (`snet-pe`). The web app uses regional VNet integration with all outbound traffic routed through the VNet.
 - Azure SQL server with Entra-only authentication, **public network access disabled**, a private endpoint, and the `privatelink.database.windows.net` private DNS zone linked to the VNet. Database: serverless General Purpose `lifecore`.
 - By default (`sqlAdminIsAppIdentity=true`) the app managed identity is the SQL Entra admin, so the app can create and seed the schema without a contained user being created from outside the VNet.
@@ -122,15 +123,40 @@ Parameter `linkDeploymentCenter` defaults to `false`. Setting it to `true` in Gi
 - `PLAYWRIGHT_SERVICE_URL`.
 - `PLAYWRIGHT_REPORT_STORAGE_ACCOUNT_NAME`.
 - `WEB_URL`.
+- `STAGING_WEB_URL` — optional; workflows look up the staging slot hostname if it is unset.
+- `REQUIRE_STAGE_GATE` — optional; set to `true` to make the `Stage gate` check fail on PRs that don't have the `stage` label.
 - `DEPLOYMENT_MODE` — `githubActions` or `appServiceBuild`.
 
 ## Workflows
 
-- `ci.yml`: restore, build, and unit tests on pull requests and non-main pushes.
-- `deploy-app.yml`: main-branch deployment in GitHub Actions mode, readiness polling, then smoke load tests and UI tests.
+- `ci.yml`: restore, build, and unit tests on pull requests and non-main pushes. PRs labelled `stage` also run the stage gate (see below).
+- `deploy-app.yml`: promotes to production on merge to `main` by swapping the `staging` slot into production, then runs smoke load tests and UI tests against production.
 - `provision.yml`: manual `azd provision` using OIDC. The GitHub identity needs elevated RBAC to create role assignments, so expect the first provision to be local.
 - `ui-tests.yml`: reusable/manual TypeScript Playwright Workspace test workflow using `AZURE_TENANT_ID`, `PLAYWRIGHT_SERVICE_URL`, and `WEB_URL`; it uploads the local HTML report artifact and the Azure reporter uploads the same run to Playwright Workspaces reporting.
 - `load-tests.yml`: reusable/manual Azure Load Testing workflow. Profiles map to `loadtests/smoke.yaml`, `loadtests/underwriter-journey.yaml`, `loadtests/csr-policy-servicing.yaml`, and `loadtests/mixed-peak.yaml`.
+
+## Stage gate and promotion
+
+This mimics a DevOps flow where a change is deployed to a production-like upper environment and must pass the full test suite before it is promoted.
+
+1. **Request stage.** Add the `stage` label to a pull request. Create the label once with `gh label create stage --description "Deploy to stage and run the full UI + load gate" --color 0E8A16`. Adding the label starts CI, and every later push to the labelled PR runs the gate again.
+2. **Deploy to stage.** `ci.yml` builds the PR and deploys it to the `staging` slot through the `stage` GitHub environment. The deployment appears under **Deployments** with the slot URL. Add required reviewers to the `stage` environment to require a manual approval first.
+3. **Run the full suite against stage.**
+   - All Playwright UI tests run in Playwright Workspaces. The artifact is `playwright-report-stage`.
+   - Every load profile runs in turn against the slot: `smoke`, `uw`, `csr`, then `peak`, one at a time. Each profile's `failureCriteria` is a pass/fail check. App Service metrics come from the slot resource; plan, SQL, and Application Insights metrics are shared with production.
+4. **Gate.** The `Stage gate` job passes only if the build, deployment, UI tests, and all load profiles succeed. It then sets `LIFECORE_VERIFIED_SHA=<PR head SHA>` on the slot. Make `Stage gate` a required status check in branch protection for `main`. Set `REQUIRE_STAGE_GATE=true` to also block PRs that don't have the label.
+5. **Promote.** When the PR merges, `deploy-app.yml` compares the merged PR's head SHA with the slot's `LIFECORE_VERIFIED_SHA`.
+   - If they match, it swaps the tested build into production without rebuilding.
+   - If they don't match, `main` is deployed to the slot first and then swapped. This happens for unlabelled PRs, direct pushes, or after another PR re-staged the slot.
+   - Production readiness is checked after the swap, followed by the existing smoke load and UI tests.
+
+Caveats:
+
+- There is only one staging slot. Stage-gate runs and promotions share the `lifecore-staging-slot` concurrency group, so they run one at a time. GitHub keeps only the newest *pending* run in a group, so a queued run can be cancelled by a newer one. Re-run it, or run `deploy-app.yml` manually.
+- The slot uses the production database, so stage test traffic reads and writes shared synthetic demo data.
+- Fork PRs don't get OIDC tokens, so the stage jobs skip them. The stage gate also skips when `DEPLOYMENT_MODE=appServiceBuild`.
+- A full stage run takes about 25–30 minutes; the load profiles alone run about 21 minutes of test time.
+- After a swap, the slot holds the previous production build. You can roll back by swapping again.
 
 The load test YAML files include `referenceIdentities` and `appComponents` placeholders for server-side metrics. The workflow resolves the deployed resource IDs at run time before invoking `azure/load-testing`, so uploaded tests collect App Service request/5xx/response-time/CPU/memory, App Service Plan CPU/memory, Azure SQL CPU/IO/connection/deadlock, and Application Insights request/dependency metrics.
 

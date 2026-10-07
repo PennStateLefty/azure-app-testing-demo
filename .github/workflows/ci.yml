@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # "labeled" lets adding the `stage` label kick off the staging gate without a new push.
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches-ignore:
       - main
@@ -10,9 +12,21 @@ permissions:
   contents: read
   id-token: write
 
+# PRs labelled `stage` share the single staging slot, so their runs are serialized.
+# Every other run gets its own group (no serialization, same as before).
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'stage') && (github.event.action != 'labeled' || github.event.label.name == 'stage') && 'lifecore-staging-slot' || format('ci-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+env:
+  STAGE_LABEL: stage
+  STAGING_SLOT: staging
+
 jobs:
   build-test:
     name: Build and unit test
+    # Ignore label events other than `stage`.
+    if: ${{ github.event.action != 'labeled' || github.event.label.name == 'stage' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,3 +53,184 @@ jobs:
           name: unit-test-results
           path: TestResults/unit/**/*.trx
           if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # Stage gate: only for same-repo PRs carrying the `stage` label.
+  # Mimics deploying to a production-like upper environment (the App Service
+  # `staging` slot) and running the full UI + load suite before promotion.
+  # Merging to main promotes the verified slot with a slot swap (deploy-app.yml).
+  # ---------------------------------------------------------------------------
+  stage-deploy:
+    name: Deploy to stage (staging slot)
+    needs: build-test
+    if: >-
+      ${{ github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'stage')
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && vars.DEPLOYMENT_MODE != 'appServiceBuild' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: stage
+      url: ${{ steps.slot.outputs.url }}
+    outputs:
+      url: ${{ steps.slot.outputs.url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish web app
+        run: dotnet publish src/LifeCore.Web/LifeCore.Web.csproj --configuration Release --output ./publish
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve staging slot URL
+        id: slot
+        env:
+          STAGING_WEB_URL: ${{ vars.STAGING_WEB_URL }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WEB_APP_NAME: ${{ vars.WEB_APP_NAME }}
+        run: |
+          set -euo pipefail
+          url="${STAGING_WEB_URL:-}"
+          if [ -z "$url" ]; then
+            url="https://$(az webapp show -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" --slot "$STAGING_SLOT" --query defaultHostName -o tsv)"
+          fi
+          echo "url=${url%/}" >> "$GITHUB_OUTPUT"
+
+      - name: Clear previous verification stamp
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WEB_APP_NAME: ${{ vars.WEB_APP_NAME }}
+        run: |
+          az webapp config appsettings delete -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" --slot "$STAGING_SLOT" \
+            --setting-names LIFECORE_VERIFIED_SHA -o none
+
+      - name: Deploy to staging slot
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.WEB_APP_NAME }}
+          slot-name: ${{ env.STAGING_SLOT }}
+          package: ./publish
+
+      - name: Wait for ready health check
+        env:
+          URL: ${{ steps.slot.outputs.url }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            code=$(curl -ksS -o /dev/null -w '%{http_code}' "$URL/health/ready" || true)
+            if [ "$code" = "200" ]; then
+              echo "$URL/health/ready returned 200"
+              exit 0
+            fi
+            echo "Attempt $attempt/60: health returned $code; waiting 10 seconds"
+            sleep 10
+          done
+          echo "Timed out waiting for $URL/health/ready" >&2
+          exit 1
+
+  stage-ui-tests:
+    name: Stage UI tests
+    needs: stage-deploy
+    uses: ./.github/workflows/ui-tests.yml
+    with:
+      base_url: ${{ needs.stage-deploy.outputs.url }}
+      report_name: playwright-report-stage
+    permissions:
+      contents: read
+      id-token: write
+
+  stage-load-tests:
+    name: Stage load tests
+    needs: [stage-deploy, stage-ui-tests]
+    # Run after the UI suite (pass or fail) so browser traffic doesn't skew load metrics.
+    if: ${{ always() && needs.stage-deploy.result == 'success' }}
+    strategy:
+      # One profile at a time so profiles don't contend for the shared plan and database.
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        test_profile: [smoke, uw, csr, peak]
+    uses: ./.github/workflows/load-tests.yml
+    with:
+      test_profile: ${{ matrix.test_profile }}
+      target_slot: staging
+      base_url: ${{ needs.stage-deploy.outputs.url }}
+    permissions:
+      contents: read
+      id-token: write
+
+  stage-gate:
+    name: Stage gate
+    needs: [build-test, stage-deploy, stage-ui-tests, stage-load-tests]
+    if: ${{ always() && github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'stage') }}
+    runs-on: ubuntu-latest
+    env:
+      STAGED: ${{ contains(github.event.pull_request.labels.*.name, 'stage') }}
+      REQUIRE_STAGE_GATE: ${{ vars.REQUIRE_STAGE_GATE }}
+      BUILD: ${{ needs.build-test.result }}
+      DEPLOY: ${{ needs.stage-deploy.result }}
+      UI: ${{ needs.stage-ui-tests.result }}
+      LOAD: ${{ needs.stage-load-tests.result }}
+    steps:
+      - name: Evaluate stage gate
+        id: gate
+        run: |
+          set -euo pipefail
+          {
+            echo "## Stage gate"
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| Build and unit test | $BUILD |"
+            echo "| Deploy to staging slot | $DEPLOY |"
+            echo "| UI tests (Playwright Workspaces) | $UI |"
+            echo "| Load tests (smoke, uw, csr, peak) | $LOAD |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$STAGED" != "true" ]; then
+            if [ "$REQUIRE_STAGE_GATE" = "true" ]; then
+              echo "::error::Add the '$STAGE_LABEL' label to deploy to stage and run the promotion gate."
+              exit 1
+            fi
+            echo "::notice::No '$STAGE_LABEL' label; stage gate not requested."
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for result in "$BUILD" "$DEPLOY" "$UI" "$LOAD"; do
+            if [ "$result" != "success" ]; then
+              echo "::error::Stage gate failed (build=$BUILD deploy=$DEPLOY ui=$UI load=$LOAD). Not eligible for promotion."
+              exit 1
+            fi
+          done
+          echo "Stage gate passed; staging slot is eligible for promotion on merge." >> "$GITHUB_STEP_SUMMARY"
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Azure login
+        if: ${{ steps.gate.outputs.passed == 'true' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Stamp staging slot as verified
+        if: ${{ steps.gate.outputs.passed == 'true' }}
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WEB_APP_NAME: ${{ vars.WEB_APP_NAME }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # deploy-app.yml swaps this exact build into production when the PR merges.
+          az webapp config appsettings set -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" --slot "$STAGING_SLOT" \
+            --settings LIFECORE_VERIFIED_SHA="$HEAD_SHA" -o none

@@ -14,10 +14,19 @@ on:
 permissions:
   contents: read
   id-token: write
+  pull-requests: read
+
+# Shares the staging slot with the CI stage gate, so promotions and PR stage runs never overlap.
+concurrency:
+  group: lifecore-staging-slot
+  cancel-in-progress: false
+
+env:
+  STAGING_SLOT: staging
 
 jobs:
   deploy:
-    name: Build, test, and deploy web app
+    name: Promote to production (slot swap)
     if: ${{ vars.DEPLOYMENT_MODE != 'appServiceBuild' }}
     runs-on: ubuntu-latest
     environment: demo
@@ -39,9 +48,6 @@ jobs:
       - name: Unit tests
         run: dotnet test tests/LifeCore.UnitTests/LifeCore.UnitTests.csproj --configuration Release --no-build --logger "trx;LogFileName=unit-tests.trx" --results-directory TestResults/unit
 
-      - name: Publish web app
-        run: dotnet publish src/LifeCore.Web/LifeCore.Web.csproj --configuration Release --output ./publish --no-build
-
       - name: Azure login
         uses: azure/login@v2
         with:
@@ -49,12 +55,57 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy to App Service
+      - name: Check whether the staging slot holds the verified build
+        id: verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WEB_APP_NAME: ${{ vars.WEB_APP_NAME }}
+        run: |
+          set -euo pipefail
+          # Head commit of the PR merged into this main commit (empty for direct pushes / manual runs).
+          pr_head=""
+          if [ "${{ github.event_name }}" = "push" ]; then
+            pr_head=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+              --jq '[.[] | select(.merged_at != null)][0].head.sha // ""' 2>/dev/null || true)
+          fi
+          verified=$(az webapp config appsettings list -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" --slot "$STAGING_SLOT" \
+            --query "[?name=='LIFECORE_VERIFIED_SHA'].value | [0]" -o tsv 2>/dev/null || true)
+          echo "Merged PR head: ${pr_head:-<none>}; staging slot verified SHA: ${verified:-<none>}"
+          if [ -n "$pr_head" ] && [ "$pr_head" = "$verified" ]; then
+            echo "promote_only=true" >> "$GITHUB_OUTPUT"
+            echo "Promoting the build that passed the stage gate for $pr_head (no rebuild)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "promote_only=false" >> "$GITHUB_OUTPUT"
+            echo "Staging slot is not verified for this merge; deploying main to staging before the swap." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Resolve staging slot URL
+        id: slot
+        env:
+          STAGING_WEB_URL: ${{ vars.STAGING_WEB_URL }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WEB_APP_NAME: ${{ vars.WEB_APP_NAME }}
+        run: |
+          set -euo pipefail
+          url="${STAGING_WEB_URL:-}"
+          if [ -z "$url" ]; then
+            url="https://$(az webapp show -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" --slot "$STAGING_SLOT" --query defaultHostName -o tsv)"
+          fi
+          echo "url=${url%/}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish web app
+        if: ${{ steps.verified.outputs.promote_only != 'true' }}
+        run: dotnet publish src/LifeCore.Web/LifeCore.Web.csproj --configuration Release --output ./publish --no-build
+
+      - name: Deploy to staging slot
         id: webapps_deploy
+        if: ${{ steps.verified.outputs.promote_only != 'true' }}
         continue-on-error: true
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ vars.WEB_APP_NAME }}
+          slot-name: ${{ env.STAGING_SLOT }}
           package: ./publish
 
       - name: Explain App Service zip-deploy policy fallback
@@ -71,7 +122,32 @@ jobs:
           MSG
           exit 1
 
-      - name: Wait for ready health check
+      - name: Wait for staging health check
+        env:
+          URL: ${{ steps.slot.outputs.url }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            code=$(curl -ksS -o /dev/null -w '%{http_code}' "$URL/health/ready" || true)
+            if [ "$code" = "200" ]; then
+              echo "$URL/health/ready returned 200"
+              exit 0
+            fi
+            echo "Attempt $attempt/60: health returned $code; waiting 10 seconds"
+            sleep 10
+          done
+          echo "Timed out waiting for $URL/health/ready" >&2
+          exit 1
+
+      - name: Swap staging into production
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WEB_APP_NAME: ${{ vars.WEB_APP_NAME }}
+        run: |
+          az webapp deployment slot swap -g "$AZURE_RESOURCE_GROUP" -n "$WEB_APP_NAME" \
+            --slot "$STAGING_SLOT" --target-slot production
+
+      - name: Wait for production health check
         env:
           WEB_URL: ${{ vars.WEB_URL }}
         run: |
@@ -96,6 +172,7 @@ jobs:
           path: TestResults/unit/**/*.trx
           if-no-files-found: warn
 
+  # Post-promotion smoke checks against production.
   smoke-load-tests:
     name: Smoke load test
     needs: deploy

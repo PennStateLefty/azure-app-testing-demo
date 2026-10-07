@@ -2,16 +2,17 @@
 
 An end-to-end demo of **Azure App Testing** (Azure Load Testing + Playwright Workspaces) in a GitHub Actions CI/CD flow.
 
-The system under test is **LifeCore Suite**, a mock life & annuity administration platform inspired by publicly known capabilities of Accenture Life Insurance & Annuity Platform (ALIP). It is styled with an Accenture-like design language (purple `#A100FF`, black app bar, `>` motif, Graphik → Inter font stack).
+The system under test is **LifeCore Suite**, a fictional life & annuity administration platform. Its UI uses a purple `#A100FF` accent, a black app bar, and a circular **LC** monogram with vendor-neutral demo branding.
 
-> Demo application – not affiliated with or endorsed by Accenture. Synthetic data only.
+> Demo application. Synthetic data only.
 
 ## Architecture
 
 ```
                  GitHub Actions (OIDC → user-assigned MI)
-   ci.yml ─► deploy-app.yml ─► load-tests.yml ─► Azure Load Testing (JMeter)
-                         └──► ui-tests.yml   ─► Playwright Workspaces (cloud browsers)
+   ci.yml ─(label: stage)─► staging slot ─► ui-tests.yml + load-tests.yml (all profiles) ─► Stage gate
+   deploy-app.yml (merge to main) ─► slot swap staging → production ─► smoke load + UI tests
+       load-tests.yml ─► Azure Load Testing (JMeter)   ui-tests.yml ─► Playwright Workspaces
                                    │
                                    ▼
  ┌───────────── App Service (Linux, P1v3, autoscale 2–5) ─────────────┐
@@ -76,7 +77,7 @@ azd env new lifecore-demo
 azd provision            # Bicep: App Service (VNet-integrated), private Azure SQL, App Insights, Load Testing, Playwright Workspace, identities
 ```
 
-Then set the GitHub repository variables printed by the postprovision hook and push to `main`. Deployment is **App Service continuous deployment via GitHub Actions** (`DEPLOYMENT_MODE=githubActions`); if your subscription blocks ZIP deploy, switch to the **App Service Build Service** fallback (`DEPLOYMENT_MODE=appServiceBuild`). Full details: [docs/deployment.md](docs/deployment.md).
+Then set the GitHub repository variables printed by the postprovision hook and push to `main`. To gate a PR on the full UI and load suite in a production-like **staging slot**, add the `stage` label. Merging then promotes the slot with a swap; see [docs/deployment.md](docs/deployment.md#stage-gate-and-promotion). Deployment is **App Service continuous deployment via GitHub Actions** (`DEPLOYMENT_MODE=githubActions`); if your subscription blocks ZIP deploy, switch to the **App Service Build Service** fallback (`DEPLOYMENT_MODE=appServiceBuild`). Full details: [docs/deployment.md](docs/deployment.md).
 
 Defaults: app in **West US 3** and the Playwright Workspace in **East US**. Azure SQL is private-endpoint only, and the app managed identity is its Entra admin. The Playwright Workspace has reporting enabled with a linked StorageV2 account for portal reports, traces, screenshots, and videos.
 

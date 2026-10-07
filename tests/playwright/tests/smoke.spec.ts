@@ -6,8 +6,14 @@ test.describe('Smoke', () => {
     await goTo(page, '/dashboard', 'worklist-grid');
 
     await expect(page.getByTestId('env-badge')).toHaveText('DEMO');
-    await expect(page.getByTestId('footer-disclaimer')).toContainText('not affiliated with or endorsed by Accenture');
-    await expect(page.getByTestId('footer-disclaimer')).toContainText('Synthetic data only');
+    await expect(page.getByTestId('footer-disclaimer')).toHaveText('Demo application. Synthetic data only.');
+    await expect(page.getByTestId('brand-mark')).toHaveText('LC');
+    await expect(page.getByTestId('brand-mark')).toHaveCSS('border-radius', '50%');
+    await expect(page.locator('body')).not.toContainText(/accenture/i);
+    await expect(page.locator('.lc-chevron')).toHaveCount(0);
+
+    await page.getByRole('link', { name: 'LifeCore Suite dashboard' }).click();
+    await expect(page).toHaveURL(urlRegex('/dashboard'));
 
     await page.getByTestId('nav-policies').click();
     await expect(page).toHaveURL(urlRegex('/policies'));

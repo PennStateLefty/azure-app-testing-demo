@@ -7,12 +7,22 @@ on:
         description: Base URL to test. Defaults to WEB_URL repo variable.
         required: false
         type: string
+      report_name:
+        description: Artifact name for the Playwright report.
+        required: false
+        type: string
+        default: playwright-report
   workflow_dispatch:
     inputs:
       base_url:
         description: Base URL to test. Defaults to WEB_URL repo variable.
         required: false
         type: string
+      report_name:
+        description: Artifact name for the Playwright report.
+        required: false
+        type: string
+        default: playwright-report
 
 permissions:
   contents: read
@@ -61,7 +71,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: ${{ inputs.report_name || 'playwright-report' }}
           path: |
             tests/playwright/playwright-report/**
             tests/playwright/test-results/**
